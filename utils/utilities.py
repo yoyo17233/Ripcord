@@ -80,10 +80,23 @@ def ask_gemini(prompt: str) -> str:
     print("Received response from Gemini: ", response.text)
     return response.text
 
+def iterate_braille(braille: str) -> str:
+    match braille:
+        case "⠁": braille = "⠉"
+        case "⠉": braille = "⠙"
+        case "⠙": braille = "⠸"
+        case "⠸": braille = "⠴"
+        case "⠴": braille = "⠦"
+        case "⠦": braille = "⠇"
+        case "⠇": braille = "⠋"
+        case "⠋": braille = "⠙"
+    return braille
+
+
 async def animate(msg, guild_id):
     serverid = get_server_info(guild_id).get("serverid")
-    dots = -1
+    braille = "⠁"
     while get_server_info(guild_id).get("serverstarting"):
-        dots = (dots + 1) % 3
-        await msg.edit(content=f"Starting {serverid} server{'.' * (dots + 1)}")
+        await msg.edit(content=f"Starting {serverid} server {str(braille)}")
+        braille = iterate_braille(braille)
         await asyncio.sleep(SLEEPTIME)

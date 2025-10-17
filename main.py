@@ -19,13 +19,17 @@ DEFAULT_GUILD_CONFIG = {
     "mc_console_channel_id": 1,
     "ServerInfo": {
         "logging": 0,
+        "up": 0,
         "serverstarting": 0,
         "serverid": "servername",
         "serverport": 25567,
         "deathmsg": "chat",
         "lastrevival": 0
     },
-    "ServerList":["servername"]
+    "ServerList": [
+        "servername1",
+        "servername2"
+    ]
 }
 
 load_dotenv()
@@ -37,20 +41,33 @@ config = load_config()
 
 intents = discord.Intents.default()
 intents.message_content = True  
-intents.guilds = True           
+intents.guilds = True  
+
+initialized = False     
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 @bot.event
 async def on_ready():
+
     yoyo_id = 242420160227573760  # Replace with target user's ID
     yoyo = await bot.fetch_user(yoyo_id)
     try:
         await yoyo.send("on_ready called")
-        print("✅ DM sent.")
+        print("DM sent.")
     except discord.Forbidden:
-        print("❌ Could not send DM — user has DMs disabled or blocked the bot.")
+        print("Could not send DM — user has DMs disabled or blocked the bot.")
+
+    global initialized
+    if(initialized): return
+    else: initialized = True
         
+    try:
+        await yoyo.send("on_ready passed init check")
+        print("DM sent.")
+    except discord.Forbidden:
+        print("Could not send DM — user has DMs disabled or blocked the bot.")
+
     global config
     config["console_emptier"] = 0
     save_config(config)

@@ -8,4 +8,4 @@ set datetime=%datetime: =0%
 
 REM run bot with log redirection
 chcp 65001 >nul
-python main.py > logs\log_%datetime%.txt 2>&1
+python -u main.py > logs\log_%datetime%.txt 2>&1

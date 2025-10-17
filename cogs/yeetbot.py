@@ -71,7 +71,7 @@ class YeetBot(commands.Cog):
             return
 
         await interaction.response.defer()
-        msg = await interaction.followup.send(f"Starting {get_server_info(interaction.guild.id).get('serverid')} server...", wait=True)
+        msg = await interaction.followup.send(f"Starting {get_server_info(interaction.guild.id).get('serverid')} server", wait=True)
         await startserver(self, msg, interaction.guild_id)
 
     @app_commands.command(name="stop", description="Stops the currently selected minecraft server")

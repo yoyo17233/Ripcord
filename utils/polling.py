@@ -168,9 +168,9 @@ async def startlogging(self, guild_id):
     yoyo = await self.bot.fetch_user(yoyo_id)
     try:
         await yoyo.send("a logging loop starting for guildid " + str(guild_id))
-        print("✅ DM sent.")
+        print("DM sent.")
     except:
-        print("❌ Could not send DM — user has DMs disabled or blocked the bot.")
+        print("Could not send DM — user has DMs disabled or blocked the bot.")
     
     threading.Thread(target=poll_log_file, args=(guild_id, loop, console, chat, botchannel), daemon=True).start()
     if(VERBOSE): print("this was fine 4")
