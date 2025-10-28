@@ -124,7 +124,7 @@ async def start_log_buffer_task(self):
         for guild_id, messages in log_dict_copy.items():
             # Send the grouped messages to the appropriate channels
             console_channel = await self.bot.fetch_channel(config.get("guilds").get(str(guild_id)).get("mc_console_channel_id"))
-
+            print("console emptier is running...")
             # Join the messages and send them to Discord (adjust size limit if needed)
             joined = "\n".join(messages)
             if len(joined) > 7600:  # 1900 * 4
@@ -154,7 +154,6 @@ async def start_log_buffer_task(self):
 async def startlogging(self, guild_id):
     if(VERBOSE): print("attempting to start logging")
     update_server_info("logging", 1, guild_id)
-    loop = asyncio.get_running_loop()
     if(VERBOSE): print("this was fine 1")
     config = load_config()
     if(VERBOSE): print("this was fine 2")
@@ -172,12 +171,12 @@ async def startlogging(self, guild_id):
     except:
         print("Could not send DM — user has DMs disabled or blocked the bot.")
     
-    threading.Thread(target=poll_log_file, args=(guild_id, loop, console, chat, botchannel), daemon=True).start()
+    threading.Thread(target=poll_log_file, args=(guild_id, self.bot.loop, console, chat, botchannel), daemon=True).start()
     if(VERBOSE): print("this was fine 4")
     console_emptier = config.get('console_emptier')
     if not console_emptier:
         if(VERBOSE): print("STARTING THE CONSOLE EMPTIER TASK")
         config["console_emptier"] = 1
         save_config(config)
-        loop.create_task(start_log_buffer_task(self))
+        self.bot.loop.create_task(start_log_buffer_task(self))
     if(VERBOSE): print("this was fine 5")
