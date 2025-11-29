@@ -86,9 +86,6 @@ class YeetBot(commands.Cog):
         command("stop", interaction.guild_id)
         update_server_info("up", 0, interaction.guild_id)
         await interaction.response.send_message(f"❌ {get_server_info(interaction.guild.id).get('serverid')} Server is now offline! ❌")
-        #await self.bot.change_presence(
-        #    activity=discord.Game("Server Offline ❌"),
-        #)
 
     @app_commands.command(name="restart", description="Restarts the currently selected minecraft server")
     @has_mc_perm()
@@ -108,10 +105,15 @@ class YeetBot(commands.Cog):
             command("stop", interaction.guild_id)
             update_server_info("up", 0, interaction.guild_id)
             await interaction.response.send_message(f"❌ {get_server_info(interaction.guild.id).get('serverid')} Server is now offline! ❌")
-            #await self.bot.change_presence(
-            #    activity=discord.Game("Server Offline ❌"),
-            #)
-            await interaction.response.send_message("Server stopped, now starting it again...")
+            serverstarting = False
+            while not serverstarting:
+                if is_server_up(interaction.guild.id):
+                    interaction.response.send_message("Server still in the end stages of stopping, waiting...")
+                    await asyncio.sleep(1)
+                else:
+                    serverstarting = True
+                    await asyncio.sleep(2)
+            await interaction.response.send_message("Server stopped fully, now starting it again...")
             await startserver(self.bot, msg, interaction.guild_id)
 
     @app_commands.command(name="server", description="Select a server to set as Active")
