@@ -80,12 +80,11 @@ class YeetBot(commands.Cog):
         if interaction.channel_id != config.get("guilds").get(str(interaction.guild.id)).get("mc_bot_channel_id"):
             await interaction.response.send_message("This channel is not set up for this command", ephemeral=True)
             return
-        if not is_server_up(interaction.guild.id):
+        if not is_server_up(interaction.guild_id):
             await interaction.response.send_message("Server isn't running? Dumbass")
             return
-        command("stop", interaction.guild_id)
-        update_server_info("up", 0, interaction.guild_id)
-        await interaction.response.send_message(f"❌ {get_server_info(interaction.guild.id).get('serverid')} Server is now offline! ❌")
+        msg = await interaction.response.send_message("Server shutting down...")
+        stopserver(msg, interaction.guild_id)
 
     @app_commands.command(name="restart", description="Restarts the currently selected minecraft server")
     @has_mc_perm()
@@ -104,7 +103,7 @@ class YeetBot(commands.Cog):
         else:
             command("stop", interaction.guild_id)
             update_server_info("up", 0, interaction.guild_id)
-            await interaction.response.send_message(f"❌ {get_server_info(interaction.guild.id).get('serverid')} Server is now offline! ❌")
+            msg = await interaction.response.send_message(f"❌ {get_server_info(interaction.guild.id).get('serverid')} Server is now offline! ❌")
             serverstarting = False
             while not serverstarting:
                 if is_server_up(interaction.guild.id):
@@ -114,6 +113,7 @@ class YeetBot(commands.Cog):
                     serverstarting = True
                     await asyncio.sleep(2)
             await interaction.response.send_message("Server stopped fully, now starting it again...")
+            msg = await interaction.response.send_message("Starting...")
             await startserver(self.bot, msg, interaction.guild_id)
 
     @app_commands.command(name="server", description="Select a server to set as Active")

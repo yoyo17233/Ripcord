@@ -89,6 +89,11 @@ async def startserver(self, msg, guild_id):
     )
     await server_status_check(self, msg, guild_id)
 
+async def stopserver(msg, guild_id):
+    command("stop", guild_id)
+    update_server_info("up", 0, guild_id)
+    await msg.edit(content=f"❌ {get_server_info(guild_id).get('serverid')} Server is now offline! ❌")
+
 async def checkserversup(self):
     print("Checking if any servers are down...")
     
