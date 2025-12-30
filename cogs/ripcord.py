@@ -110,31 +110,6 @@ class Ripcord(commands.Cog):
         msg = await interaction.followup.send(f"Server shutting down...", wait=True)
         await stopserver(msg)
 
-    @app_commands.command(name="restart", description="Restarts the currently selected minecraft server")
-    @is_bot_channel()
-    @has_bot_perm()
-    async def restart(self, interaction: discord.Interaction):
-        msg = await interaction.response.send_message("Restarting the server...")
-        container_id = get_containerid_from_interaction(interaction)
-
-        if not is_server_up(container_id) and not containers[container_id]["starting"]:
-            await msg.edit(content=f"Server wasn't running... I suppose I'll start it though")
-            await startserver(self.bot, msg)
-        elif not is_server_up(container_id) and containers[container_id]["starting"]:
-            await msg.edit(content=f"Let it finish starting, goddamn it")
-            return
-        else:
-            command("stop", container_id)
-            containers[container_id]["up"] = False
-            save_containers()
-            await msg.edit(content=f"{containers[container_id]['server']} Server has been shut down, turning it back on...")
-            while is_server_up(container_id):
-                await msg.edit(content=f"Server still in the end stages of stopping, waiting...")
-                await asyncio.sleep(2)
-            await asyncio.sleep(2)
-            await msg.edit(content=f"Server stopped fully, now starting it again...")
-            await startserver(self.bot, msg)
-
     @app_commands.command(name="server", description="Select a server to set as active")
     @app_commands.autocomplete(server=server_autocomplete)
     @app_commands.describe(server="Pick a server to set as active...")
@@ -259,16 +234,19 @@ class Ripcord(commands.Cog):
                        "Commands:\n\n"
                        "/start                 - Start the server\n"
                        "/stop                  - Stop the server\n"
-                       "/restart               - Restart the server\n"
                        "/server                - Changes the active server\n"
+                       "/allowserver           - Adds server to containers allowed server list\n"
                        "/ping                  - Ping the bot\n"
                        "/status                - Check server status\n"
-
-                       "/setperms       - Set the role that can use the minecraft commands\n"
-                       "/setconsoleperms - Set the role that can use the minecraft console commands\n"
-                       "/setconsole   - Set the channel for Minecraft console messages\n"
-                       "/setchat      - Set the channel for Minecraft chat messages\n"
-                       "/setbotchannel       - Set the channel for the Minecraft bot messages\n"
+                       "\n"
+                       "/createcontainer       - Creates a container to hold a server\n"
+                       "\t Bot Perm -> Permission to use the bot\n"
+                       "\t Console Perm -> Permission to use the console\n"
+                       "\t Nick -> Nickname for the container\n"
+                       "\t Bot Channel -> Channel to give commands to the bot (Implicit from the channel where the command is run)\n"
+                       "\t Chat Channel -> Channel for minecraft chat\n"
+                       "\t Console Channel -> Channel for minecraft chat\n"
+                       "\t Port -> Port for minecraft server to run on\n"
                        "/help                  - Show this message\n```\n", ephemeral=True)
                        
     async def cog_app_command_error(self, interaction: discord.Interaction, error: AppCommandError):
