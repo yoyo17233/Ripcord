@@ -51,7 +51,7 @@ async def server_start_loop(self, msg):
     starttime = time.time()
     asyncio.create_task(animate(msg))
     while containers[container_id]["starting"]:
-        if time.time() - starttime > 180:
+        if time.time() - starttime > 300:
             await msg.edit(content=f"❌ Server failed to start within 5 minutes.")
             containers[container_id]["starting"] = False
             save_containers()
@@ -95,9 +95,11 @@ async def startserver(self, msg):
 
     write_server_properties(server_name, server_props)
 
-    runfilepath = build_run(server_name)
+    runfilepath = SERVER_DIR / server_name / "run.bat"
+    print(f"checking for path {runfilepath}")
     if not os.path.exists(runfilepath):
-        generate_run_bat(server_name)
+        print("generating run.bat")
+        #generate_run_bat(server_name)
 
     print("starting " + containers[container_id]["server"] + " server")
     await asyncio.create_subprocess_shell(
@@ -119,7 +121,7 @@ async def checkserversup(self):
     print("Checking if any servers are down...")
     
     for container_id, container_data in containers.items():
-        print(f"Checking container {container_id} for crashes...")
+        print(f"Checking container {container_data["nick"]} for crashes...")
         
         if not is_server_up(container_id):
             
