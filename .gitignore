@@ -1,6 +1,4 @@
 .env
-facts.txt
-containers.json
 logs/
 __pycache__/
 containers.json
