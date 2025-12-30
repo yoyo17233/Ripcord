@@ -1,0 +1,270 @@
+import discord, asyncio
+from discord.ext import commands, tasks
+from discord import app_commands
+from discord.app_commands import AppCommandError, CheckFailure
+from utils.perms import has_bot_perm, is_admin, check_console_perm_msg, check_is_server_up
+from utils.minecraft import checkserversup, startserver, stopserver, get_server_loader
+from utils.data import containers, save_containers, servers, create_container, get_containerid_from_nickandguild,  get_containerids_from_guildid, get_containerid_from_interaction, get_containerid_from_channelid
+from utils.networking import is_server_up, command
+
+async def server_autocomplete(
+    interaction: discord.Interaction,
+    current: str,
+) -> list[app_commands.Choice[str]]:
+    container_id = get_containerid_from_interaction(interaction)
+    allowed = containers[container_id]["allowed_servers"]
+    choices = ["Check", *allowed]
+    return [
+        app_commands.Choice(name=server, value=server)
+        for server in choices
+        if current.lower() in server.lower()
+    ]
+
+async def allowserver_autocomplete(
+    interaction: discord.Interaction,
+    current: str,
+) -> list[app_commands.Choice[str]]:
+    return [
+        app_commands.Choice(name=server, value=server)
+        for server in servers
+        if current.lower() in server.lower()  and server.lower() != "archive"
+    ]
+
+async def container_autocomplete(
+    interaction: discord.Interaction,
+    current: str,
+) -> list[app_commands.Choice[str]]:
+    choices = []
+
+    for container_id, container_data in containers.items():
+        nick = container_data.get("nick", "")
+        container_guild_id = int(container_data.get("guild_id"))
+        if container_guild_id != interaction.guild_id:
+            continue
+        if current.lower() in nick.lower():
+            choices.append(app_commands.Choice(name=nick, value=container_id))
+
+    return choices
+
+class Ripcord(commands.Cog):
+    def __init__(self, bot: commands.Bot):
+        self.bot = bot
+        self.checkservervalue.start()
+        
+    @tasks.loop(minutes=1)
+    async def checkservervalue(self):
+        await checkserversup(self)
+
+    @commands.Cog.listener()
+    async def on_message(self, message):
+        await handle_message(self, message)
+
+    @app_commands.command(name="createcontainer", description="Creates a new container object to hold a server")
+    @is_admin()
+    async def createContainer\
+    (self, interaction: discord.Interaction, botperm: discord.Role, consoleperm: discord.Role, \
+     nickname: str, chatchannel: discord.TextChannel, consolechannel: discord.TextChannel, port: int):
+        await interaction.response.defer()
+        result = create_container(interaction, nickname, botperm.id, consoleperm.id, chatchannel.id, consolechannel.id, port)
+        if not isinstance(result, str):
+            msg = await interaction.followup.send(f"Creation of container {nickname} failed with error code {result}", wait=True, ephemeral=True)
+        else:
+            msg = await interaction.followup.send(f"Container {nickname} created with ID {result}", wait=True, ephemeral=True)
+
+    @app_commands.command(name="start", description="Starts the currently selected minecraft server")
+    @has_bot_perm()
+    async def start(self, interaction: discord.Interaction):
+        container_id = get_containerid_from_interaction(interaction)
+        if is_server_up(container_id):
+            await interaction.response.send_message("Server is already running!", ephemeral=True)
+            return
+        if containers[container_id]["starting"]:
+            await interaction.response.send_message("Server is already starting up, calm your tits!", ephemeral=True)
+            return
+
+        await interaction.response.defer()
+        msg = await interaction.followup.send(f"Starting {containers[container_id]['server']} server", wait=True)
+        await startserver(self, msg)
+
+    @app_commands.command(name="stop", description="Stops the currently selected minecraft server")
+    @has_bot_perm()
+    async def stop(self, interaction: discord.Interaction):
+        if not is_server_up(get_containerid_from_interaction(interaction)):
+            await interaction.response.send_message("Server isn't running? Dumbass", ephemeral=True)
+            return
+        msg = await interaction.response.send_message("Server shutting down...")
+        stopserver(msg)
+
+    @app_commands.command(name="restart", description="Restarts the currently selected minecraft server")
+    @has_bot_perm()
+    async def restart(self, interaction: discord.Interaction):
+        msg = await interaction.response.send_message("Restarting the server...")
+        container_id = get_containerid_from_interaction(interaction)
+
+        if not is_server_up(container_id) and not containers[container_id]["starting"]:
+            await msg.edit(content=f"Server wasn't running... I suppose I'll start it though")
+            await startserver(self.bot, msg)
+        elif not is_server_up(container_id) and containers[container_id]["starting"]:
+            await msg.edit(content=f"Let it finish starting, goddamn it")
+            return
+        else:
+            command("stop", container_id)
+            containers[container_id]["up"] = False
+            save_containers()
+            await msg.edit(content=f"{containers[container_id]['server']} Server has been shut down, turning it back on...")
+            while is_server_up(container_id):
+                await msg.edit(content=f"Server still in the end stages of stopping, waiting...")
+                await asyncio.sleep(2)
+            await asyncio.sleep(2)
+            await msg.edit(content=f"Server stopped fully, now starting it again...")
+            await startserver(self.bot, msg)
+
+    @app_commands.command(name="server", description="Select a server to set as active")
+    @app_commands.autocomplete(server=server_autocomplete)
+    @app_commands.describe(server="Pick a server to set as active...")
+    @has_bot_perm()
+    async def server(self, interaction: discord.Interaction, server: str):
+        container_id = get_containerid_from_interaction(interaction)
+
+        if server == "Check":
+            await interaction.response.send_message(f"Current server is set to: {containers[container_id]['server']}", ephemeral=True)
+            return
+
+        if server not in containers[container_id]["allowed_servers"]:
+            await interaction.response.send_message(
+                f"Server `{server}` is not allowed for this container. "
+                f"Add it with `/allowserver`.", ephemeral=True)
+            return
+        
+        containers[container_id]["server"] = server
+        save_containers()
+        await interaction.response.send_message(f"Server `{server}` has been set for this container. ", ephemeral=True)
+
+    @app_commands.command(name="allowserver", description="Allows a server to a container")
+    @app_commands.autocomplete(server=allowserver_autocomplete)
+    @is_admin()
+    async def allowserver(self, interaction: discord.Interaction, server: str):
+        container_id = get_containerid_from_interaction(interaction)
+
+        if not server in servers:
+            await interaction.response.send_message(f"{server} Directory not found", ephemeral=True)
+            return
+
+        if server in containers[container_id]["allowed_servers"]:
+            await interaction.response.send_message(f"{server} is already allowed", ephemeral=True)
+            return
+        
+        containers[container_id]["allowed_servers"].append(server)
+        save_containers()
+        await interaction.response.send_message(f"{server} has been added to container {containers[container_id]["nick"]}", ephemeral=True)
+
+    @app_commands.command(name="container", description="gives information about the current containers")
+    @app_commands.autocomplete(container=container_autocomplete)
+    @app_commands.describe(container="Select a container to get information for")
+    @has_bot_perm()
+    async def container(self, interaction: discord.Interaction, container: str):
+        container_id = container
+        containers[container_id]["bot_perm"]
+        message_text = (
+            f"{container}:\n"
+            f"General Perm = <@&{containers[container_id]['bot_perm']}>\n"
+            f"Console Perm = <@&{containers[container_id]['console_perm']}>\n"
+            f"Guild ID = {containers[container_id]['guild_id']}\n"
+            f"Nick = {containers[container_id]['nick']}\n"
+            f"Bot Channel = <#{containers[container_id]['bot_channel_id']}>\n"
+            f"Chat Channel = <#{containers[container_id]['chat_id']}>\n"
+            f"Console Channel = <#{containers[container_id]['console_id']}>\n"
+            f"Port = {containers[container_id]['port']}\n"
+            f"Active Server = {containers[container_id]['server']}\n"
+            f"Allowed Servers = {containers[container_id]['allowed_servers']}\n"
+            f"Logging = {containers[container_id]['logging']}\n"
+            f"Up = {containers[container_id]['up']}\n"
+            f"Starting = {containers[container_id]['starting']}\n"
+            f"Last Revive = {containers[container_id]['lastrevive']}"
+        )        
+        await interaction.response.send_message(
+            message_text,
+            ephemeral=True
+        )
+
+    @app_commands.command(name="ping", description="Responds \"Pong!\" - Used to test connection to the bot")
+    @has_bot_perm()
+    async def ping(self, interaction: discord.Interaction):
+        await interaction.response.send_message("Pong!", ephemeral=True)
+
+    @app_commands.command(name="status", description="Responds with the current status of the active server")
+    @has_bot_perm()
+    async def status(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        container_id = get_containerid_from_interaction(interaction)
+        message = await interaction.followup.send("Pinging server...", wait=True)
+        if is_server_up(container_id):
+            containers[container_id]["starting"] = 0
+            save_containers()
+            await message.edit(content=f"✅ {containers[container_id]["server"]} Server is online! ✅")
+        else:
+            await message.edit(content=f"❌ {containers[container_id]["server"]} Server is offline! ❌")
+
+    @app_commands.command(name="list", description="Lists the current players on the active server")
+    @has_bot_perm()
+    @check_is_server_up()
+    async def list(self, interaction: discord.Interaction):
+        await interaction.response.send_message(f"```{command('list', get_containerid_from_interaction(interaction))}```")
+
+    @app_commands.command(name="tps", description="Sends information regarding Ticks Per Second of the server (SkyFactory only)")
+    @has_bot_perm()
+    @check_is_server_up()
+    async def tps(self, interaction: discord.Interaction):
+        container_id = get_containerid_from_interaction(interaction)
+        loader = get_server_loader(containers[container_id]["server"])
+        tpsCommand = "tps"
+        if loader == "neoforge":
+            tpsCommand = "neoforge tps"
+        if loader == "forge":
+            tpsCommand = "forge tps"
+        await interaction.response.send_message(f"```{command(tpsCommand, get_containerid_from_interaction(interaction))}```")
+
+    @app_commands.command(name="help", description="Gives information about possible commands")
+    @has_bot_perm()
+    async def help(self, interaction: discord.Interaction):
+        await interaction.response.send_message("```\n"
+                       "Commands:\n\n"
+                       "/start                 - Start the server\n"
+                       "/stop                  - Stop the server\n"
+                       "/restart               - Restart the server\n"
+                       "/server                - Changes the active server\n"
+                       "/ping                  - Ping the bot\n"
+                       "/status                - Check server status\n"
+
+                       "/setperms       - Set the role that can use the minecraft commands\n"
+                       "/setconsoleperms - Set the role that can use the minecraft console commands\n"
+                       "/setconsole   - Set the channel for Minecraft console messages\n"
+                       "/setchat      - Set the channel for Minecraft chat messages\n"
+                       "/setbotchannel       - Set the channel for the Minecraft bot messages\n"
+                       "/help                  - Show this message\n```\n", ephemeral=True)
+                       
+    async def cog_app_command_error(self, interaction: discord.Interaction, error: AppCommandError):
+        if isinstance(error, CheckFailure):
+            if interaction.response.is_done():
+                await interaction.followup.send("❌ You don't have permission to use this command.", ephemeral=True)
+            else:
+                await interaction.response.send_message("❌ You don't have permission to use this command.", ephemeral=True)
+        else:
+            print(f"Unhandled error: {error}")
+    
+async def handle_message(self, message):
+    if message.author == self.bot.user:
+        return
+
+    container_id = get_containerid_from_channelid(message.channel.id)
+    from utils.minecraft import command
+    if message.channel.id == containers[container_id]["chat_id"]:
+        command(f"say §9<{message.author.global_name}>§r {message.content}", container_id)
+    elif message.channel.id == containers[container_id]["console_id"]:
+        if check_console_perm_msg(message):
+            response = command(message.content, container_id)
+            if response.strip():
+                await message.channel.send(f"```{response}```")
+
+async def setup(bot: commands.Bot):
+    await bot.add_cog(Ripcord(bot))
