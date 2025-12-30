@@ -6,7 +6,6 @@ from collections import defaultdict
 VERBOSE = True
 
 console_emptier = False
-console_buffer = []
 log_dict = defaultdict(list)
 
 def poll_log_file(container_id, loop, bot):
@@ -114,10 +113,13 @@ async def start_log_buffer_task(self):
 async def startlogging(self, container_id):
     containers[container_id]["logging"] = True
 
-    dm_superuser(self.bot, "a logging loop starting for container id " + str(container_id))
+    global console_emptier
+
+    await dm_superuser(self.bot, "a logging loop starting for container id " + str(container_id))
     
     threading.Thread(target=poll_log_file, args=(container_id, self.bot.loop, self.bot), daemon=True).start()
     if not console_emptier:
-        dm_superuser(self.bot, "STARTING THE ONE CONSOLE EMPTIER TASK")
+        await dm_superuser(self.bot, "STARTING THE ONE CONSOLE EMPTIER TASK")
+        print("STARTING THE ONE CONSOLE EMPTIER TASK")
         console_emptier = True
         self.bot.loop.create_task(start_log_buffer_task(self))

@@ -57,7 +57,6 @@ def init_guilds(bot):
 
     save_containers()
 
-
 def get_servers():
     return [
         name
@@ -71,7 +70,7 @@ def create_container(interaction: discord.Interaction, nick, \
     guild_id = interaction.guild_id
     bot_channel_id = interaction.channel_id
 
-    if port > 30000 or port < 20000:
+    if port >= 30000 or port < 20000:
         return 1
     
     for container in containers.values():

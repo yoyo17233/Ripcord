@@ -3,7 +3,9 @@ from dotenv import load_dotenv
 import discord
 from discord.ext import commands
 from utils.utilities import dm_superuser
-from utils.data import init_guilds
+from utils.data import init_guilds, containers, save_containers
+from utils.networking import is_server_up
+from utils.polling import startlogging
 
 VERBOSE = True
 
@@ -50,5 +52,16 @@ async def load_cogs():
 async def setup_hook():
     await dm_superuser(bot, "setup_hook called")
     await load_cogs()
+
+    for container_id, container_data in containers.items():
+        containers[container_id]["starting"] = False
+        if is_server_up(container_id):
+            containers[container_id]["up"] = True
+            print(f"Starting logging for container {container_data["nick"]}")
+            await startlogging(bot.get_cog("Ripcord"), container_id)
+        else:
+            containers[container_id]["up"] = False
+            containers[container_id]["logging"] = False
+    save_containers()
 
 bot.run(TOKEN)

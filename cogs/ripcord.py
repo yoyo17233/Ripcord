@@ -2,10 +2,11 @@ import discord, asyncio
 from discord.ext import commands, tasks
 from discord import app_commands
 from discord.app_commands import AppCommandError, CheckFailure
-from utils.perms import has_bot_perm, is_admin, check_console_perm_msg, check_is_server_up
+from utils.perms import has_bot_perm, is_admin, check_console_perm_msg, check_is_server_up, is_bot_channel
 from utils.minecraft import checkserversup, startserver, stopserver, get_server_loader
 from utils.data import containers, save_containers, servers, create_container, get_containerid_from_nickandguild,  get_containerids_from_guildid, get_containerid_from_interaction, get_containerid_from_channelid
 from utils.networking import is_server_up, command
+from typing import Union
 
 async def server_autocomplete(
     interaction: discord.Interaction,
@@ -61,10 +62,16 @@ class Ripcord(commands.Cog):
 
     @app_commands.command(name="createcontainer", description="Creates a new container object to hold a server")
     @is_admin()
-    async def createContainer\
-    (self, interaction: discord.Interaction, botperm: discord.Role, consoleperm: discord.Role, \
-     nickname: str, chatchannel: discord.TextChannel, consolechannel: discord.TextChannel, port: int):
-        await interaction.response.defer()
+    async def createContainer(
+        self, 
+        interaction: discord.Interaction, 
+        botperm: discord.Role, 
+        consoleperm: discord.Role,
+        nickname: str, 
+        chatchannel: Union[discord.TextChannel, discord.Thread],
+        consolechannel: Union[discord.TextChannel, discord.Thread], 
+        port: int):
+        await interaction.response.defer(ephemeral=True)
         result = create_container(interaction, nickname, botperm.id, consoleperm.id, chatchannel.id, consolechannel.id, port)
         if not isinstance(result, str):
             msg = await interaction.followup.send(f"Creation of container {nickname} failed with error code {result}", wait=True, ephemeral=True)
@@ -72,6 +79,7 @@ class Ripcord(commands.Cog):
             msg = await interaction.followup.send(f"Container {nickname} created with ID {result}", wait=True, ephemeral=True)
 
     @app_commands.command(name="start", description="Starts the currently selected minecraft server")
+    @is_bot_channel()
     @has_bot_perm()
     async def start(self, interaction: discord.Interaction):
         container_id = get_containerid_from_interaction(interaction)
@@ -81,21 +89,29 @@ class Ripcord(commands.Cog):
         if containers[container_id]["starting"]:
             await interaction.response.send_message("Server is already starting up, calm your tits!", ephemeral=True)
             return
+        if not containers[container_id]["server"]:
+            await interaction.response.send_message("No server selected, select one using /server", ephemeral=True)
+            return
 
         await interaction.response.defer()
         msg = await interaction.followup.send(f"Starting {containers[container_id]['server']} server", wait=True)
         await startserver(self, msg)
 
     @app_commands.command(name="stop", description="Stops the currently selected minecraft server")
+    @is_bot_channel()
     @has_bot_perm()
     async def stop(self, interaction: discord.Interaction):
         if not is_server_up(get_containerid_from_interaction(interaction)):
             await interaction.response.send_message("Server isn't running? Dumbass", ephemeral=True)
             return
-        msg = await interaction.response.send_message("Server shutting down...")
-        stopserver(msg)
+        
+
+        await interaction.response.defer()
+        msg = await interaction.followup.send(f"Server shutting down...", wait=True)
+        await stopserver(msg)
 
     @app_commands.command(name="restart", description="Restarts the currently selected minecraft server")
+    @is_bot_channel()
     @has_bot_perm()
     async def restart(self, interaction: discord.Interaction):
         msg = await interaction.response.send_message("Restarting the server...")
@@ -122,6 +138,7 @@ class Ripcord(commands.Cog):
     @app_commands.command(name="server", description="Select a server to set as active")
     @app_commands.autocomplete(server=server_autocomplete)
     @app_commands.describe(server="Pick a server to set as active...")
+    @is_bot_channel()
     @has_bot_perm()
     async def server(self, interaction: discord.Interaction, server: str):
         container_id = get_containerid_from_interaction(interaction)
@@ -136,12 +153,18 @@ class Ripcord(commands.Cog):
                 f"Add it with `/allowserver`.", ephemeral=True)
             return
         
+        if is_server_up(container_id):
+            await interaction.response.send_message(
+            f"The container is already up with server {server}."
+            f"You must first stop it with /stop to change the server.", ephemeral=True)
+        
         containers[container_id]["server"] = server
         save_containers()
         await interaction.response.send_message(f"Server `{server}` has been set for this container. ", ephemeral=True)
 
     @app_commands.command(name="allowserver", description="Allows a server to a container")
     @app_commands.autocomplete(server=allowserver_autocomplete)
+    @is_bot_channel()
     @is_admin()
     async def allowserver(self, interaction: discord.Interaction, server: str):
         container_id = get_containerid_from_interaction(interaction)
@@ -161,15 +184,17 @@ class Ripcord(commands.Cog):
     @app_commands.command(name="container", description="gives information about the current containers")
     @app_commands.autocomplete(container=container_autocomplete)
     @app_commands.describe(container="Select a container to get information for")
+    @is_bot_channel()
     @has_bot_perm()
     async def container(self, interaction: discord.Interaction, container: str):
         container_id = container
+        guild = await self.bot.fetch_guild(containers[container_id]['guild_id'])
         containers[container_id]["bot_perm"]
         message_text = (
             f"{container}:\n"
             f"General Perm = <@&{containers[container_id]['bot_perm']}>\n"
             f"Console Perm = <@&{containers[container_id]['console_perm']}>\n"
-            f"Guild ID = {containers[container_id]['guild_id']}\n"
+            f"Guild = {guild.name}\n"
             f"Nick = {containers[container_id]['nick']}\n"
             f"Bot Channel = <#{containers[container_id]['bot_channel_id']}>\n"
             f"Chat Channel = <#{containers[container_id]['chat_id']}>\n"
@@ -193,6 +218,7 @@ class Ripcord(commands.Cog):
         await interaction.response.send_message("Pong!", ephemeral=True)
 
     @app_commands.command(name="status", description="Responds with the current status of the active server")
+    @is_bot_channel()
     @has_bot_perm()
     async def status(self, interaction: discord.Interaction):
         await interaction.response.defer()
@@ -206,12 +232,14 @@ class Ripcord(commands.Cog):
             await message.edit(content=f"❌ {containers[container_id]["server"]} Server is offline! ❌")
 
     @app_commands.command(name="list", description="Lists the current players on the active server")
+    @is_bot_channel()
     @has_bot_perm()
     @check_is_server_up()
     async def list(self, interaction: discord.Interaction):
         await interaction.response.send_message(f"```{command('list', get_containerid_from_interaction(interaction))}```")
 
     @app_commands.command(name="tps", description="Sends information regarding Ticks Per Second of the server (SkyFactory only)")
+    @is_bot_channel()
     @has_bot_perm()
     @check_is_server_up()
     async def tps(self, interaction: discord.Interaction):
@@ -246,9 +274,11 @@ class Ripcord(commands.Cog):
     async def cog_app_command_error(self, interaction: discord.Interaction, error: AppCommandError):
         if isinstance(error, CheckFailure):
             if interaction.response.is_done():
-                await interaction.followup.send("❌ You don't have permission to use this command.", ephemeral=True)
+                print(f"Check failed: {type(error).__name__}, message: {error}")
+                await interaction.followup.send(f"Error: {error}", ephemeral=True)
             else:
-                await interaction.response.send_message("❌ You don't have permission to use this command.", ephemeral=True)
+                print(f"Check failed: {type(error).__name__}, message: {error}")
+                await interaction.response.send_message(f"Error: {error}", ephemeral=True)
         else:
             print(f"Unhandled error: {error}")
     
@@ -257,11 +287,13 @@ async def handle_message(self, message):
         return
 
     container_id = get_containerid_from_channelid(message.channel.id)
+    if not container_id:
+        return
     from utils.minecraft import command
     if message.channel.id == containers[container_id]["chat_id"]:
         command(f"say §9<{message.author.global_name}>§r {message.content}", container_id)
     elif message.channel.id == containers[container_id]["console_id"]:
-        if check_console_perm_msg(message):
+        if await check_console_perm_msg(message):
             response = command(message.content, container_id)
             if response.strip():
                 await message.channel.send(f"```{response}```")

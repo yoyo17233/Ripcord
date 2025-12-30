@@ -14,7 +14,7 @@ def has_bot_perm():
 
 async def check_bot_perm(interaction: discord.Interaction) -> bool:
     containerid = get_containerid_from_interaction(interaction)
-    if containers[containerid] == None:
+    if containerid == None:
         raise CheckFailure("No container associated with this channel.")
     bot_perm = containers[containerid]["bot_perm"]
     member = interaction.user
@@ -29,7 +29,7 @@ def has_console_perm():
 
 async def check_console_perm(interaction: discord.Interaction) -> bool:
     containerid = get_containerid_from_interaction(interaction)
-    if containers[containerid] == None:
+    if containerid == None:
         raise CheckFailure("No container associated with this channel.")
     console_perm = containers[containerid]["console_perm"]
     member = interaction.user
@@ -41,7 +41,7 @@ async def check_console_perm(interaction: discord.Interaction) -> bool:
 
 async def check_console_perm_msg(message: discord.Message) -> bool:
     containerid = get_containerid_from_channelid(message.channel.id)
-    if containers[containerid] == None:
+    if containerid == None:
         raise CheckFailure("No container associated with this channel.")
     console_perm = containers[containerid]["console_perm"]
     member = message.author
@@ -84,3 +84,14 @@ def server_up(interaction: discord.Interaction) -> bool:
     if is_server_up(container_id):
         return True
     raise CheckFailure(f"{containers[container_id]["server"]} server is down")
+
+def is_bot_channel():
+    return app_commands.check(check_is_bot_channel)
+
+def check_is_bot_channel(interaction: discord.Interaction) -> bool:
+    container_id = get_containerid_from_interaction(interaction)
+    channel_id = interaction.channel_id
+    bot_channel_id = containers[container_id]["bot_channel_id"]
+    if bot_channel_id == channel_id:
+        return True
+    raise CheckFailure(f"<#{channel_id}> is not the botchannel for its container. Try <#{bot_channel_id}>")
