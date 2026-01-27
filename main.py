@@ -60,7 +60,6 @@ async def setup_hook():
             print(f"Starting logging for container {container_data["nick"]}")
             await startlogging(bot.get_cog("Ripcord"), container_id)
         else:
-            containers[container_id]["up"] = False
             containers[container_id]["logging"] = False
     save_containers()
 

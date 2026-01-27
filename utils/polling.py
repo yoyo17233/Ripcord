@@ -41,6 +41,7 @@ def poll_log_file(container_id, loop, bot):
         time.sleep(1)
 
 async def send_log_to_discord(container_id, message, bot):
+    if (VERBOSE): print("sending log to discord...")
     usernames = get_usernames(container_id)
 
     if not message.strip():
@@ -48,12 +49,14 @@ async def send_log_to_discord(container_id, message, bot):
     
     # Console
     log_dict[container_id].append(message)
-    print(f"Container {container_id} now has {len(log_dict[container_id])} messages.")
+    if (VERBOSE): print(f"Container {container_id} now has {len(log_dict[container_id])} messages.")
 
     from utils.minecraft import get_server_loader
     loader = get_server_loader(containers[container_id]["server"])
+    if (VERBOSE): print("loader is " + str(loader))
+    if (VERBOSE): print("usernames are " + str(usernames))
 
-    
+    # User Chats
     if "<" in message and ">" in message and "[Rcon] <" not in message:
         if loader == "vanilla": # Vanilla
             newmessage = message[message.index('<')+1:]
@@ -61,11 +64,33 @@ async def send_log_to_discord(container_id, message, bot):
             newmessage = message[message.index('[Server thread/INFO] [net.minecraft.server.MinecraftServer/]:') + 62:]
         if loader == "forge": # Vanilla
             newmessage = message[message.index('] [Server thread/INFO]: ') + 24:]
+        if (VERBOSE): print("newmessage is " + str(newmessage))
 
-        if newmessage.startswith(tuple(usernames)):
-            chatchannel = bot
+        if newmessage[1:].startswith(tuple(usernames)):
+            if (VERBOSE): print("passed here")
+            chatchannel = await bot.fetch_channel(containers[container_id]["chat_id"])
+            if (VERBOSE): print("got channel, sending now:")
             await chatchannel.send(f"```{message[message.index('<'):]}```")
+            if (VERBOSE): print("sent")
             return
+        
+    # User deaths/joins/leaves
+
+    print("hitting HERE SECOND PART")
+    if loader == "vanilla": # Vanilla
+        newmessage = message[message.index('<')+1:]
+    if loader == "neoforge": # Vanilla
+        newmessage = message[message.index('[Server thread/INFO] [net.minecraft.server.MinecraftServer/]:') + 62:]
+    if loader == "forge": # Vanilla
+        newmessage = message[message.index('] [Server thread/INFO]: ') + 24:]
+    if (VERBOSE): print("NEW NEW MESSAGE is " + str(newmessage))
+    if newmessage.startswith(tuple(usernames)):
+        if (VERBOSE): print("IT PASSED HERE I SWEAR")
+        chatchannel = await bot.fetch_channel(containers[container_id]["chat_id"])
+        if (VERBOSE): print("IT GOT THE RIGHT CHANNEL, ITS SENDING NOW!!!!!:")
+        await chatchannel.send(f"```{newmessage}```")
+        if (VERBOSE): print("IT SENT IT!!!")
+        return
 
 
 def get_usernames(container_id):

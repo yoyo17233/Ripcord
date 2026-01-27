@@ -1,7 +1,7 @@
 import os, asyncio, socket, time
 from pathlib import Path
 from dotenv import load_dotenv
-from utils.utilities import animate
+from utils.utilities import animate, dm_superuser
 from utils.perms import check_console_perm_msg
 from utils.data import containers, save_containers, get_containerid_from_channelid
 from utils.networking import command, is_server_up
@@ -136,12 +136,14 @@ async def checkserversup(self):
 
                 channel_id = container_data["bot_channel_id"]
                 botchannel = self.bot.get_channel(channel_id)
+                while not botchannel:
+                    await asyncio.sleep(3)
+                    botchannel = self.bot.get_channel(channel_id)
                 
                 previousrevive = containers[container_id]["lastrevive"]
                 if time.time() - previousrevive < 600:
                     print("Two crashes within 10 minutes, catestrophic error:")
                     perm_id = containers[container_id]["bot_perm"]
-                    
                     await botchannel.send(f"{server_name} server has crashed twice in 10 minutes. Please check in <@&{perm_id}>")
                     containers[container_id]["up"] = False
                     save_containers()
@@ -149,6 +151,9 @@ async def checkserversup(self):
 
                 await botchannel.send(f"{server_name} server appears to be down. Attempting to restart...")
                 msg = await botchannel.send(f"{server_name} server is restarting...")
+                containers[container_id]["starting"] = False
+                containers[container_id]["up"] = False
+                containers[container_id]["logging"] = False
                 await startserver(self, msg)
                 print("successfully started server, hopefully...")
                 containers[container_id]["lastrevive"] = time.time()
