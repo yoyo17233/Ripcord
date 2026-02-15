@@ -1,5 +1,4 @@
 .env
-facts.txt
-config.json
 logs/
 __pycache__/
+containers.json

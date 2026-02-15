@@ -1,90 +1,97 @@
-import discord
+import discord, os
 from discord.app_commands import CheckFailure
 from discord import app_commands
-from utils.utilities import load_config
+from utils.data import containers, get_containerid_from_interaction, get_containerid_from_channelid
+from utils.networking import is_server_up
 
 VERBOSE = True
 
-config = load_config()
+SUPERUSERS = os.getenv("SUPERUSERS")
+superusers = [int(x) for x in SUPERUSERS.split(",") if x.strip()]
 
-def has_snoopie_perm():
-    async def predicate(interaction: discord.Interaction) -> bool:
-        guild_id = str(interaction.guild.id)
-        perms_role_id = config.get("guilds", {}).get(guild_id, {}).get("snoopie_perms_role_id")
+def has_bot_perm():
+    return app_commands.check(check_bot_perm)
 
-        if not perms_role_id:
-            raise CheckFailure("Permissions role not set.")
+async def check_bot_perm(interaction: discord.Interaction) -> bool:
+    containerid = get_containerid_from_interaction(interaction)
+    if containerid == None:
+        raise CheckFailure("No container associated with this channel.")
+    bot_perm = containers[containerid]["bot_perm"]
+    member = interaction.user
+    if any(role.id == bot_perm for role in member.roles):
+        return True
+    role = interaction.guild.get_role(bot_perm)
+    role_name = role.name if role else f"ID {bot_perm}"
+    raise CheckFailure(f'User does not have required role: {role_name}')
 
-        member = interaction.user
-        if isinstance(member, discord.Member):
-            if any(role.id == perms_role_id for role in member.roles):
-                return True
+def has_console_perm():
+    return app_commands.check(check_console_perm)
 
-        raise CheckFailure("You don't have permission to use this command.")
-    return app_commands.check(predicate)
+async def check_console_perm(interaction: discord.Interaction) -> bool:
+    containerid = get_containerid_from_interaction(interaction)
+    if containerid == None:
+        raise CheckFailure("No container associated with this channel.")
+    console_perm = containers[containerid]["console_perm"]
+    member = interaction.user
+    if any(role.id == console_perm for role in member.roles):
+        return True
+    role = interaction.guild.get_role(console_perm)
+    role_name = role.name if role else f"ID {console_perm}"
+    raise CheckFailure(f'User does not have required role: {role_name}')
 
-def has_mc_perm():
-    async def predicate(interaction: discord.Interaction) -> bool:
-        perm_id = config.get("guilds").get(str(interaction.guild.id)).get("mc_perms_role_id")
-
-        if not perm_id:
-            raise CheckFailure("Permissions role not set.")
-
-        member = interaction.user
-        if isinstance(member, discord.Member):
-            if any(role.id == perm_id for role in member.roles):
-                return True
-
-        raise CheckFailure("You don't have permission to use this command.")
-    return app_commands.check(predicate)
-
-def has_mc_console_perm():
-    async def predicate(interaction: discord.Interaction) -> bool:
-        perm_id = config.get("guilds").get(str(interaction.guild.id)).get("mc_console_perms_role_id")
-
-        if not perm_id:
-            raise CheckFailure("Permissions role not set.")
-
-        member = interaction.user
-        if isinstance(member, discord.Member):
-            if any(role.id == perm_id for role in member.roles):
-                return True
-
-        raise CheckFailure("You don't have permission to use this command.")
-    return app_commands.check(predicate)
-
-def has_mc_console_perm(guild, member):
-    if (VERBOSE): print("checking guild " + str(guild) + " against member " + str(member.global_name))
-    perm_id = config.get("guilds").get(str(guild.id)).get("mc_console_perms_role_id")
-    role_id = int(perm_id)
-    permRole = guild.get_role(role_id)
-    if (VERBOSE): print("perm is " + str(permRole.name))
-    if not role_id:
-        raise CheckFailure("Permissions role not set.")
-    if isinstance(member, discord.Member):
-        if (VERBOSE): print("User is a member object")
-        for userRole in member.roles:
-            if (VERBOSE): print("checking " + str(userRole.name) + " against " + str(permRole.name))
-            if userRole.id == permRole.id:
-                if (VERBOSE): print("Passed console auth")
-                return True
-    if (VERBOSE): print("failed console auth")
-    return False
+async def check_console_perm_msg(message: discord.Message) -> bool:
+    containerid = get_containerid_from_channelid(message.channel.id)
+    if containerid == None:
+        raise CheckFailure("No container associated with this channel.")
+    console_perm = containers[containerid]["console_perm"]
+    member = message.author
+    if any(role.id == console_perm for role in member.roles):
+        return True
+    role = message.guild.get_role(console_perm)
+    role_name = role.name if role else f"ID {console_perm}"
+    raise CheckFailure(f'User does not have required role: {role_name}')
 
 def is_admin():
+    async def predicate(interaction) -> bool:
+        if interaction.permissions.administrator:
+            return True
+        raise CheckFailure("You must be an Administrator to use this command.")
+    return app_commands.check(predicate)
+
+def is_superuser():
     async def predicate(interaction: discord.Interaction) -> bool:
-        config = load_config()
-        if interaction.user.id in config.get("admins"):
+        if interaction.user.id in superusers:
             return True
         else:
             raise CheckFailure("You don't have permission to use this command.")
     return app_commands.check(predicate)
 
 def check_is_admin(interaction: discord.Interaction) -> bool:
-    if interaction.author_id in config.get("admins"):
+    if interaction.permissions.administrator:
         return True
-    else:
-        return False
+    return False
     
+def check_is_superuser(interaction: discord.Interaction) -> bool:
+    if interaction.user in superusers:
+        return True
+    return False
 
-    
+def check_is_server_up():
+    return app_commands.check(server_up)
+
+def server_up(interaction: discord.Interaction) -> bool:
+    container_id = get_containerid_from_interaction(interaction)
+    if is_server_up(container_id):
+        return True
+    raise CheckFailure(f"{containers[container_id]["server"]} server is down")
+
+def is_bot_channel():
+    return app_commands.check(check_is_bot_channel)
+
+def check_is_bot_channel(interaction: discord.Interaction) -> bool:
+    container_id = get_containerid_from_interaction(interaction)
+    channel_id = interaction.channel_id
+    bot_channel_id = containers[container_id]["bot_channel_id"]
+    if bot_channel_id == channel_id:
+        return True
+    raise CheckFailure(f"<#{channel_id}> is not the botchannel for its container. Try <#{bot_channel_id}>")

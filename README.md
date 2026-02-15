@@ -21,22 +21,17 @@ Additionally, you must name the servers that each discord server has access to v
 - /tps                   => Runs /forge tps or /neoforge tps to get server performance values
 - /say <message>         => Says the message in chat as [Rcon]
 
-## Snoopie Fact Cog
-
-- /snoopiefact           => Sends a snapple style fact to whichever discord server the command was sent in
-- /gemini                => Uses gemini API to ask a question to the AI
-- /sendallsnoopiefact    => Sends a snapple style fact to every discord server the bot is in that has a valid channel (Locked to bot admins - which is only me at the moment)
-Automatically sends a sendallsnoopiefact every day at 10am - as long as the bot is running
-
 ## Role + Channel Setting Cog
 
-- /setmcpermsrole        => Set the role that can use the minecraft commands
-- /setmcconsolepermsrole => Set the role that can use the minecraft console commands
-- /setmcconsolechannel   => Set the channel for Minecraft console messages
-- /setmcchatchannel      => Set the channel for Minecraft chat messages
-- /setmcbotchannel       => Set the channel for the Minecraft bot messages
-- /setfactchannel        => Set the channel for Snoopie facts
-- /setfactrole           => Set the role to ping for Snoopie facts
-- /setpermsrole          => Set the role to have Snoopie fact permissions
+- /createcontainer       - Creates a container to hold a server
+    * Bot Perm -> Permission to use the bot
+    * Console Perm -> Permission to use the console
+    * Nick -> Nickname for the container
+    * Bot Channel -> Channel to give commands to the bot (Implicit from the channel where the command is run)
+    * Chat Channel -> Channel for minecraft chat
+    * Console Channel -> Channel for minecraft chat
+    * Port -> Port for minecraft server to run on
+- /container             - Shows information on any container
+- /allowserver           - Allows current container to swap to this server (servers automatically grabbed from directory in .env)
 
 Questions can be brought to timothy.kwartler@gmail.com or yoyo.4444 on discord
