@@ -6,6 +6,7 @@ from utils.perms import has_bot_perm, is_admin, check_console_perm_msg, check_is
 from utils.minecraft import checkserversup, startserver, stopserver, get_server_loader
 from utils.data import containers, save_containers, servers, create_container, get_containerid_from_nickandguild,  get_containerids_from_guildid, get_containerid_from_interaction, get_containerid_from_channelid
 from utils.networking import is_server_up, command
+from utils.discord import generateEmbed, ServerControlView
 from typing import Union
 
 async def server_autocomplete(
@@ -74,41 +75,9 @@ class Ripcord(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         result = create_container(interaction, nickname, botperm.id, consoleperm.id, chatchannel.id, consolechannel.id, port)
         if not isinstance(result, str):
-            msg = await interaction.followup.send(f"Creation of container {nickname} failed with error code {result}", wait=True, ephemeral=True)
+            await interaction.followup.send(f"Creation of container {nickname} failed with error code {result}", wait=True, ephemeral=True)
         else:
-            msg = await interaction.followup.send(f"Container {nickname} created with ID {result}", wait=True, ephemeral=True)
-
-    @app_commands.command(name="start", description="Starts the currently selected minecraft server")
-    @is_bot_channel()
-    @has_bot_perm()
-    async def start(self, interaction: discord.Interaction):
-        container_id = get_containerid_from_interaction(interaction)
-        if is_server_up(container_id):
-            await interaction.response.send_message("Server is already running!", ephemeral=True)
-            return
-        if containers[container_id]["starting"]:
-            await interaction.response.send_message("Server is already starting up, calm your tits!", ephemeral=True)
-            return
-        if not containers[container_id]["server"]:
-            await interaction.response.send_message("No server selected, select one using /server", ephemeral=True)
-            return
-
-        await interaction.response.defer()
-        msg = await interaction.followup.send(f"Starting {containers[container_id]['server']} server", wait=True)
-        await startserver(self, msg)
-
-    @app_commands.command(name="stop", description="Stops the currently selected minecraft server")
-    @is_bot_channel()
-    @has_bot_perm()
-    async def stop(self, interaction: discord.Interaction):
-        if not is_server_up(get_containerid_from_interaction(interaction)):
-            await interaction.response.send_message("Server isn't running? Dumbass", ephemeral=True)
-            return
-        
-
-        await interaction.response.defer()
-        msg = await interaction.followup.send(f"Server shutting down...", wait=True)
-        await stopserver(msg)
+            await interaction.followup.send(f"Container {nickname} created with ID {result}", wait=True, ephemeral=True)
 
     @app_commands.command(name="server", description="Select a server to set as active")
     @app_commands.autocomplete(server=server_autocomplete)
@@ -248,6 +217,22 @@ class Ripcord(commands.Cog):
                        "\t Console Channel -> Channel for minecraft chat\n"
                        "\t Port -> Port for minecraft server to run on\n"
                        "/help                  - Show this message\n```\n", ephemeral=True)
+        
+    @app_commands.command(name="embed", description="embedmbid")
+    @has_bot_perm()
+    async def embed(self, interaction: discord.Interaction):
+    
+        container_id = get_containerid_from_interaction(interaction)
+        serverInfo = containers[container_id]
+    
+        embed = generateEmbed(serverInfo)
+        view = ServerControlView(container_id)
+    
+        await interaction.response.send_message(
+            embed=embed,
+            view=view,
+            ephemeral=True
+        )
                        
     async def cog_app_command_error(self, interaction: discord.Interaction, error: AppCommandError):
         if isinstance(error, CheckFailure):

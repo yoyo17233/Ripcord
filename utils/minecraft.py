@@ -1,7 +1,7 @@
 import os, asyncio, socket, time
 from pathlib import Path
 from dotenv import load_dotenv
-from utils.utilities import animate, dm_superuser
+from utils.utilities import animate
 from utils.perms import check_console_perm_msg
 from utils.data import containers, save_containers, get_containerid_from_channelid
 from utils.networking import command, is_server_up
@@ -45,15 +45,14 @@ def build_whitelist(text):
 def build_properties(text):
     return f"{SERVER_DIR / text / 'server.properties'}"
         
-async def server_start_loop(self, msg):
-    container_id = get_containerid_from_channelid(msg.channel.id)
+async def server_start_loop(self, container_id):
     containers[container_id]["starting"] = True
     starttime = time.time()
-    asyncio.create_task(animate(msg))
     while containers[container_id]["starting"]:
+        from utils.discord import refresh_panel
         if time.time() - starttime > 300:
-            await msg.edit(content=f"❌ Server failed to start within 5 minutes.")
             containers[container_id]["starting"] = False
+            await refresh_panel(self.bot, container_id)
             save_containers()
             return
         if is_server_up(container_id):
@@ -68,12 +67,12 @@ async def server_start_loop(self, msg):
             containers[container_id]["starting"] = False
             save_containers()
             print("serverstarting successfully set to 0")
-            await msg.edit(content=f"✅ {containers[container_id]["server"]} Server is now online! ✅")
+            await refresh_panel(self.bot, container_id)
             return
         await asyncio.sleep(POLLSECONDS)
 
-async def startserver(self, msg):
-    container_id = get_containerid_from_channelid(msg.channel.id)
+async def startserver(self, container_id):
+    from utils.discord import refresh_panel
     server_name = containers[container_id]["server"]
 
     server_props = read_server_properties(server_name)
@@ -107,15 +106,15 @@ async def startserver(self, msg):
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE
     )
-    await server_start_loop(self, msg)
+    await server_start_loop(self, container_id)
 
-async def stopserver(msg):
-    container_id = get_containerid_from_channelid(msg.channel.id)
+async def stopserver(self, container_id):
     command("stop", container_id)
     containers[container_id]["up"] = False
     containers[container_id]["logging"] = False
     save_containers()
-    await msg.edit(content=f"❌ {containers[container_id]["server"]} Server is now offline! ❌")
+    from utils.discord import refresh_panel
+    await refresh_panel(self.bot, container_id)
 
 async def checkserversup(self):
     print("Checking if any servers are down...")
