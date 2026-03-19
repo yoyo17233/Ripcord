@@ -115,12 +115,14 @@ async def stopserver(container_id):
         print(f"[INFO] No active log thread for container {container_id}")
 
 async def checkserversup(bot):
+    from utils.discord import refresh_panel, start_loop
     print("Checking if any servers are down...")
     
     for container_id, container_data in containers.items():
         print(f"Checking container {container_data['nick']} for crashes...")
         
         if not is_server_up(container_id) and containers[container_id]["up"]:
+            await refresh_panel(bot, container_id)
             server_name = containers[container_id]["server"]
             print(f"Server crashed for container: {container_id}, on server {server_name}, restarting...")
             
@@ -146,6 +148,7 @@ async def checkserversup(bot):
             containers[container_id]["starting"] = False
             containers[container_id]["up"] = False
             containers[container_id]["logging"] = False
+            asyncio.create_task(start_loop(bot, container_id))  # start loop first
             await startserver(bot, container_id)
             await msg.edit(content=f"{server_name} server crashed, but should be back up now.")
             print("successfully started server, hopefully...")
