@@ -14,11 +14,11 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 
 intents = discord.Intents.default()
 intents.message_content = True  
-intents.guilds = True  
-
-initialized = False     
+intents.guilds = True    
 
 bot = commands.Bot(command_prefix="!", intents=intents)
+
+initialized = False   
 
 @bot.event
 async def on_ready():
@@ -57,8 +57,8 @@ async def setup_hook():
         containers[container_id]["starting"] = False
         if is_server_up(container_id):
             containers[container_id]["up"] = True
-            print(f"Starting logging for container {container_data["nick"]}")
-            await startlogging(bot.get_cog("Ripcord"), container_id)
+            print(f"Starting logging for container {container_data['nick']}")
+            await startlogging(bot, container_id)
         else:
             containers[container_id]["logging"] = False
     save_containers()

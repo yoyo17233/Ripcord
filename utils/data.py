@@ -1,4 +1,4 @@
-import json, os, discord, uuid, copy
+import json, os, discord, uuid
 from dotenv import load_dotenv
 from pathlib import Path
 
@@ -64,9 +64,7 @@ def get_servers():
         if os.path.isdir(os.path.join(SERVER_DIR, name))
     ]
 
-def create_container(interaction: discord.Interaction, nick, \
-                     bot_perms, console_perms, chat_id, console_id, \
-                     port):
+def create_container(interaction: discord.Interaction, nick, bot_perms, console_perms, chat_id, console_id, port):
     guild_id = interaction.guild_id
     bot_channel_id = interaction.channel_id
 
@@ -144,17 +142,6 @@ def get_containerids_from_guildid(guild_id):
             container_ids.append(container_id)
 
     return container_ids
-
-def get_containerid_from_nickandguild(nick, guild_id):
-    print(f"Checking for {nick} and {guild_id}")
-    for container_id, container_data in containers.items():
-        print(f"checking nick {nick} against {container_data.get("nick")}")
-        if nick == container_data.get("nick"):
-            print(f"checking str guild_id {guild_id} against {container_data.get("guild_id")}")
-            if str(guild_id) == container_data.get("guild_id"):
-                print(f"found one, container id {container_id}")
-                return container_id
-    return None 
 
 containers = load_containers()
 servers = get_servers()

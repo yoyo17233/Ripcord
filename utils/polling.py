@@ -1,18 +1,23 @@
-import asyncio, os, time, json, threading
+import asyncio, os, json, threading
 from utils.utilities import dm_superuser
 from utils.data import containers
 from collections import defaultdict
+from utils.minecraft_io import build_log, build_whitelist, get_server_loader
 
 VERBOSE = True
 
 console_emptier = False
 log_dict = defaultdict(list)
+active_logs = {}
 
-def poll_log_file(container_id, loop, bot):
-    from utils.minecraft import build_log
+# =========================
+# THREAD FUNCTION
+# =========================
+def poll_log_file(container_id, loop, bot, stop_event):
     filepath = build_log(containers[container_id]["server"])
     last_position = os.path.getsize(filepath)
-    while True:
+
+    while not stop_event.is_set():
         try:
             with open(filepath, "r", encoding="utf-8") as f:
                 f.seek(0, os.SEEK_END)
@@ -26,10 +31,11 @@ def poll_log_file(container_id, loop, bot):
                 last_position = f.tell()
 
             for line in new_lines:
-                if(VERBOSE): print("newlines found in containerid " + str(container_id))
+                if stop_event.is_set():
+                    break
+
                 line = line.strip()
                 if line:
-                    if(VERBOSE): print("line found = " + line)
                     asyncio.run_coroutine_threadsafe(
                         send_log_to_discord(container_id, line, bot),
                         loop
@@ -38,113 +44,175 @@ def poll_log_file(container_id, loop, bot):
         except Exception as e:
             print(f"[ERROR] Log reader crashed: {e}")
 
-        time.sleep(1)
+        # Better than time.sleep → instant shutdown
+        stop_event.wait(1)
 
+    print(f"[INFO] Thread for container {container_id} shutting down cleanly.")
+
+
+# =========================
+# DISCORD SENDER
+# =========================
 async def send_log_to_discord(container_id, message, bot):
-    if (VERBOSE): print("sending log to discord...")
-    usernames = get_usernames(container_id)
+    if VERBOSE:
+        print("sending log to discord...")
 
     if not message.strip():
         return
-    
-    # Console
+
+    usernames = get_usernames(container_id)
+
+    # Console buffer
     log_dict[container_id].append(message)
-    if (VERBOSE): print(f"Container {container_id} now has {len(log_dict[container_id])} messages.")
 
-    from utils.minecraft import get_server_loader
     loader = get_server_loader(containers[container_id]["server"])
-    if (VERBOSE): print("loader is " + str(loader))
-    if (VERBOSE): print("usernames are " + str(usernames))
 
-    # User Chats
+    # =========================
+    # CHAT DETECTION
+    # =========================
     if "<" in message and ">" in message and "[Rcon] <" not in message:
-        if loader == "vanilla": # Vanilla
+        if loader == "vanilla":
             newmessage = message[message.index('<')+1:]
-        if loader == "neoforge": # Vanilla
-            newmessage = message[message.index('[Server thread/INFO] [net.minecraft.server.MinecraftServer/]:') + 62:]
-        if loader == "forge": # Vanilla
-            newmessage = message[message.index('] [Server thread/INFO]: ') + 24:]
-        if (VERBOSE): print("newmessage is " + str(newmessage))
+        elif loader == "neoforge":
+            newmessage = message.split("]:", 1)[-1].strip()
+        elif loader == "forge":
+            newmessage = message.split("]: ", 1)[-1].strip()
+        else:
+            return
 
         if newmessage[1:].startswith(tuple(usernames)):
-            if (VERBOSE): print("passed here")
             chatchannel = await bot.fetch_channel(containers[container_id]["chat_id"])
-            if (VERBOSE): print("got channel, sending now:")
             await chatchannel.send(f"```{message[message.index('<'):]}```")
-            if (VERBOSE): print("sent")
             return
-        
-    # User deaths/joins/leaves
 
-    print("hitting HERE SECOND PART")
-    if loader == "vanilla": # Vanilla
-        newmessage = message[message.index('<')+1:]
-    if loader == "neoforge": # Vanilla
-        newmessage = message[message.index('[Server thread/INFO] [net.minecraft.server.MinecraftServer/]:') + 62:]
-    if loader == "forge": # Vanilla
-        newmessage = message[message.index('] [Server thread/INFO]: ') + 24:]
-    if (VERBOSE): print("NEW NEW MESSAGE is " + str(newmessage))
-    if newmessage.startswith(tuple(usernames)):
-        if (VERBOSE): print("IT PASSED HERE I SWEAR")
-        chatchannel = await bot.fetch_channel(containers[container_id]["chat_id"])
-        if (VERBOSE): print("IT GOT THE RIGHT CHANNEL, ITS SENDING NOW!!!!!:")
-        await chatchannel.send(f"```{newmessage}```")
-        if (VERBOSE): print("IT SENT IT!!!")
+    # =========================
+    # OTHER USER EVENTS
+    # =========================
+    if loader == "vanilla":
+        newmessage = message[message.index('<')+1:] if "<" in message else message
+    elif loader in ["neoforge", "forge"]:
+        newmessage = message.split("]:", 1)[-1].strip()
+    else:
         return
 
+    if newmessage.startswith(tuple(usernames)):
+        chatchannel = await bot.fetch_channel(containers[container_id]["chat_id"])
+        await chatchannel.send(f"```{newmessage}```")
 
+
+# =========================
+# WHITELIST READER
+# =========================
 def get_usernames(container_id):
-    from utils.minecraft import build_whitelist
     path = build_whitelist(containers[container_id]["server"])
     with open(path, "r") as f:
         data = json.load(f)
-    usernames = [entry["name"] for entry in data]
-    return usernames
+    return [entry["name"] for entry in data]
 
-async def start_log_buffer_task(self):
-    print("started log buffer task...")
+
+# =========================
+# CONSOLE BUFFER TASK
+# =========================
+async def start_log_buffer_task(bot):
+    print("[INFO] Started log buffer task...")
+
     while True:
-        log_dict_copy = log_dict.copy()
-        for container_id, messages in log_dict_copy.items():
-            # Send the grouped messages to the appropriate channels
-            console_channel = await self.bot.fetch_channel(containers[container_id]["console_id"])
-            print("console emptier is running...")
-            # Join the messages and send them to Discord (adjust size limit if needed)
-            joined = "\n".join(messages)
-            if len(joined) > 7600:
-                await console_channel.send(f"```{joined[:1900]}```")
-                await console_channel.send(f"```{joined[1900:3800]}```")
-                await console_channel.send(f"```{joined[3800:5700]}```")
-                await console_channel.send(f"```{joined[5700:7600]}```")
-            elif len(joined) > 5700:
-                await console_channel.send(f"```{joined[:1900]}```")
-                await console_channel.send(f"```{joined[1900:3800]}```")
-                await console_channel.send(f"```{joined[3800:5700]}```")
-                await console_channel.send(f"```{joined[5700:]}```")
-            elif len(joined) > 3800:
-                await console_channel.send(f"```{joined[:1900]}```")
-                await console_channel.send(f"```{joined[1900:3800]}```")
-                await console_channel.send(f"```{joined[3800:]}```")
-            elif len(joined) > 1900:
-                await console_channel.send(f"```{joined[:1900]}```")
-                await console_channel.send(f"```{joined[1900:]}```")
-            else:
-                await console_channel.send(f"```{joined}```")
-
-        # Clear the log_dict after sending
+        log_dict_copy = dict(log_dict)
         log_dict.clear()
+
+        for container_id, messages in log_dict_copy.items():
+            console_channel = await bot.fetch_channel(
+                containers[container_id]["console_id"]
+            )
+
+            joined = "\n".join(messages)
+
+            # Discord message splitting
+            for i in range(0, len(joined), 1900):
+                chunk = joined[i:i+1900]
+                await console_channel.send(f"```{chunk}```")
+
         await asyncio.sleep(1)
 
-async def startlogging(self, container_id):
+
+# =========================
+# START LOGGING
+# =========================
+async def startlogging(bot, container_id):
+    global console_emptier, active_logs
+
+    await dm_superuser(
+        bot,
+        f"ATTEMPTING TO START LOGGING FOR {containers[container_id]['nick']}"
+    )
+
+    # Already running?
+    if container_id in active_logs:
+        data = active_logs[container_id]
+        if data["thread"].is_alive():
+            await dm_superuser(bot, "SERVER ALREADY HAS LIVING THREAD")
+            return
+
+    stop_event = threading.Event()
+
+    log_thread = threading.Thread(
+        target=poll_log_file,
+        args=(container_id, bot.loop, bot, stop_event),
+        daemon=True
+    )
+
+    log_thread.start()
+
+    active_logs[container_id] = {
+        "thread": log_thread,
+        "stop_event": stop_event
+    }
+
     containers[container_id]["logging"] = True
 
-    global console_emptier
+    await dm_superuser(bot, f"Started logging for {containers[container_id]['nick']}")
 
-    await dm_superuser(self.bot, "a logging loop starting for container id " + str(container_id))
-    
-    threading.Thread(target=poll_log_file, args=(container_id, self.bot.loop, self.bot), daemon=True).start()
+    # Start buffer task once
     if not console_emptier:
-        await dm_superuser(self.bot, "STARTING THE ONE CONSOLE EMPTIER TASK")
-        print("STARTING THE ONE CONSOLE EMPTIER TASK")
         console_emptier = True
-        self.bot.loop.create_task(start_log_buffer_task(self))
+        bot.loop.create_task(start_log_buffer_task(bot))
+
+
+# =========================
+# STOP LOGGING
+# =========================
+def stop_logging(container_id):
+    if container_id not in active_logs:
+        print(f"[INFO] No active thread for container {container_id}")
+        return False
+
+    data = active_logs[container_id]
+    thread = data["thread"]
+    stop_event = data["stop_event"]
+
+    print(f"[INFO] Stopping thread for container {container_id}...")
+
+    stop_event.set()
+    thread.join(timeout=5)
+
+    if thread.is_alive():
+        print(f"[WARN] Thread did not stop in time.")
+        return False
+
+    del active_logs[container_id]
+    containers[container_id]["logging"] = False
+
+    print(f"[INFO] Thread stopped cleanly.")
+    return True
+
+def get_active_log_names():
+    active = []
+
+    for container_id, data in active_logs.items():
+        thread = data.get("thread")
+
+        if thread and thread.is_alive():
+            name = containers[container_id].get("nick", str(container_id))
+            active.append(name)
+
+    return ", ".join(active) if active else "None"
