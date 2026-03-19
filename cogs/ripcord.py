@@ -1,17 +1,16 @@
-import discord, asyncio
+import discord
 from discord.ext import commands, tasks
 from discord import app_commands
 from discord.app_commands import AppCommandError, CheckFailure
-from utils.perms import has_bot_perm, is_admin, check_console_perm_msg, check_is_server_up, is_bot_channel
-from utils.minecraft import checkserversup, startserver, stopserver, get_server_loader
-from utils.data import containers, save_containers, servers, create_container, get_containerid_from_nickandguild,  get_containerids_from_guildid, get_containerid_from_interaction, get_containerid_from_channelid
+from utils.perms import has_bot_perm, is_admin, check_is_server_up, is_bot_channel
+from utils.minecraft import checkserversup, startserver, stopserver, handle_message
+from utils.minecraft_io import get_server_loader
+from utils.polling import get_active_log_names
+from utils.data import containers, save_containers, servers, create_container, get_containerid_from_interaction
 from utils.networking import is_server_up, command
 from typing import Union
 
-async def server_autocomplete(
-    interaction: discord.Interaction,
-    current: str,
-) -> list[app_commands.Choice[str]]:
+async def server_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
     container_id = get_containerid_from_interaction(interaction)
     allowed = containers[container_id]["allowed_servers"]
     choices = ["Check", *allowed]
@@ -21,20 +20,14 @@ async def server_autocomplete(
         if current.lower() in server.lower()
     ]
 
-async def allowserver_autocomplete(
-    interaction: discord.Interaction,
-    current: str,
-) -> list[app_commands.Choice[str]]:
+async def allowserver_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
     return [
         app_commands.Choice(name=server, value=server)
         for server in servers
-        if current.lower() in server.lower()  and server.lower() != "archive"
+        if current.lower() in server.lower() and server.lower() != "archive"
     ]
 
-async def container_autocomplete(
-    interaction: discord.Interaction,
-    current: str,
-) -> list[app_commands.Choice[str]]:
+async def container_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
     choices = []
 
     for container_id, container_data in containers.items():
@@ -54,11 +47,11 @@ class Ripcord(commands.Cog):
         
     @tasks.loop(minutes=1)
     async def checkservervalue(self):
-        await checkserversup(self)
+        await checkserversup(self.bot)
 
     @commands.Cog.listener()
     async def on_message(self, message):
-        await handle_message(self, message)
+        await handle_message(self.bot, message)
 
     @app_commands.command(name="createcontainer", description="Creates a new container object to hold a server")
     @is_admin()
@@ -74,9 +67,9 @@ class Ripcord(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         result = create_container(interaction, nickname, botperm.id, consoleperm.id, chatchannel.id, consolechannel.id, port)
         if not isinstance(result, str):
-            msg = await interaction.followup.send(f"Creation of container {nickname} failed with error code {result}", wait=True, ephemeral=True)
+            await interaction.followup.send(f"Creation of container {nickname} failed with error code {result}", wait=True, ephemeral=True)
         else:
-            msg = await interaction.followup.send(f"Container {nickname} created with ID {result}", wait=True, ephemeral=True)
+            await interaction.followup.send(f"Container {nickname} created with ID {result}", wait=True, ephemeral=True)
 
     @app_commands.command(name="start", description="Starts the currently selected minecraft server")
     @is_bot_channel()
@@ -95,7 +88,7 @@ class Ripcord(commands.Cog):
 
         await interaction.response.defer()
         msg = await interaction.followup.send(f"Starting {containers[container_id]['server']} server", wait=True)
-        await startserver(self, msg)
+        await startserver(self.bot, msg)
 
     @app_commands.command(name="stop", description="Stops the currently selected minecraft server")
     @is_bot_channel()
@@ -105,7 +98,6 @@ class Ripcord(commands.Cog):
             await interaction.response.send_message("Server isn't running? Dumbass", ephemeral=True)
             return
         
-
         await interaction.response.defer()
         msg = await interaction.followup.send(f"Server shutting down...", wait=True)
         await stopserver(msg)
@@ -248,6 +240,11 @@ class Ripcord(commands.Cog):
                        "\t Console Channel -> Channel for minecraft chat\n"
                        "\t Port -> Port for minecraft server to run on\n"
                        "/help                  - Show this message\n```\n", ephemeral=True)
+        
+    @app_commands.command(name="logging", description="Gives information about running logging threads")
+    @has_bot_perm()
+    async def logging(self, interaction: discord.Interaction):
+        await interaction.response.send_message(get_active_log_names(), ephemeral=True)
                        
     async def cog_app_command_error(self, interaction: discord.Interaction, error: AppCommandError):
         if isinstance(error, CheckFailure):
@@ -259,22 +256,6 @@ class Ripcord(commands.Cog):
                 await interaction.response.send_message(f"Error: {error}", ephemeral=True)
         else:
             print(f"Unhandled error: {error}")
-    
-async def handle_message(self, message):
-    if message.author == self.bot.user:
-        return
-
-    container_id = get_containerid_from_channelid(message.channel.id)
-    if not container_id:
-        return
-    from utils.minecraft import command
-    if message.channel.id == containers[container_id]["chat_id"]:
-        command(f"say §9<{message.author.global_name}>§r {message.content}", container_id)
-    elif message.channel.id == containers[container_id]["console_id"]:
-        if await check_console_perm_msg(message):
-            response = command(message.content, container_id)
-            if response.strip():
-                await message.channel.send(f"```{response}```")
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Ripcord(bot))

@@ -17,11 +17,11 @@ def is_server_up(container_id):
         return result == 0
 
 def command(command_name, container_id):
-        try:
-            rconport = containers[container_id]["port"] + 10000
-            with MCRcon(RCON_IP, RCON_PASSWORD, port=rconport) as mcr:
-                response = mcr.command(command_name)
-            return response
-        except Exception as e:
-            print("error happened sending message")
-            return e
+    try:
+        rconport = containers[container_id]["port"] + 10000
+        with MCRcon(RCON_IP, RCON_PASSWORD, port=rconport) as mcr:
+            response = mcr.command(command_name)
+        return response
+    except Exception as e:
+        print("error happened sending message")
+        return e
