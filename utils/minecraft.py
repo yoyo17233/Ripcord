@@ -1,7 +1,6 @@
 import os, asyncio, socket, time, discord
 from pathlib import Path
 from dotenv import load_dotenv
-from utils.utilities import animate
 from utils.perms import check_console_perm_msg
 from utils.data import containers, save_containers, get_containerid_from_channelid
 from utils.networking import command, is_server_up
@@ -40,10 +39,8 @@ async def server_start_loop(bot, msg):
     containers[container_id]["starting"] = True
     starttime = time.time()
     while containers[container_id]["starting"]:
-        from utils.discord import refresh_panel
         if time.time() - starttime > 300:
             containers[container_id]["starting"] = False
-            await refresh_panel(bot, container_id)
             save_containers()
             return
         if is_server_up(container_id):
@@ -57,7 +54,6 @@ async def server_start_loop(bot, msg):
             containers[container_id]["starting"] = False
             save_containers()
             print("serverstarting successfully set to 0")
-            await refresh_panel(bot, container_id)
             return
         await asyncio.sleep(POLLSECONDS)
 
