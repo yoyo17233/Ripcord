@@ -3,12 +3,12 @@ from discord.ext import commands, tasks
 from discord import app_commands
 from discord.app_commands import AppCommandError, CheckFailure
 from utils.perms import has_bot_perm, is_admin, check_is_server_up, is_bot_channel
-from utils.minecraft import checkserversup, startserver, stopserver, handle_message
+from utils.minecraft import checkserversup,  handle_message
 from utils.minecraft_io import get_server_loader
 from utils.polling import get_active_log_names
 from utils.data import containers, save_containers, servers, create_container, get_containerid_from_interaction
 from utils.networking import is_server_up, command
-from utils.discord import generateEmbed, ServerControlView
+from utils.discord import ServerControlView
 from typing import Union
 
 async def server_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
@@ -211,21 +211,6 @@ class Ripcord(commands.Cog):
                        "\t Port -> Port for minecraft server to run on\n"
                        "/help                  - Show this message\n```\n", ephemeral=True)
         
-    @app_commands.command(name="embed", description="embedmbid")
-    @has_bot_perm()
-    async def embed(self, interaction: discord.Interaction):
-    
-        container_id = get_containerid_from_interaction(interaction)
-        serverInfo = containers[container_id]
-    
-        embed = generateEmbed(serverInfo)
-        view = ServerControlView(container_id)
-    
-        await interaction.response.send_message(
-            embed=embed,
-            view=view,
-            ephemeral=True
-        )
     @app_commands.command(name="logging", description="Gives information about running logging threads")
     @has_bot_perm()
     async def logging(self, interaction: discord.Interaction):

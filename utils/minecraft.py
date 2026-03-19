@@ -34,8 +34,7 @@ cd /d "%~dp0"
 exit
 '''
         
-async def server_start_loop(bot, msg):
-    container_id = get_containerid_from_channelid(msg.channel.id)
+async def server_start_loop(bot, container_id):
     containers[container_id]["starting"] = True
     starttime = time.time()
     while containers[container_id]["starting"]:
@@ -57,8 +56,7 @@ async def server_start_loop(bot, msg):
             return
         await asyncio.sleep(POLLSECONDS)
 
-async def startserver(bot, msg):
-    container_id = get_containerid_from_channelid(msg.channel.id)
+async def startserver(bot, container_id):
     server_name = containers[container_id]["server"]
 
     server_props = read_server_properties(server_name)
@@ -92,10 +90,10 @@ async def startserver(bot, msg):
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE
     )
-    await server_start_loop(bot, msg)
+    await server_start_loop(bot, container_id)
+    return True
 
-async def stopserver(msg):
-    container_id = get_containerid_from_channelid(msg.channel.id)
+async def stopserver(container_id):
     container = containers[container_id]
 
     # Stop the Minecraft server
@@ -116,16 +114,11 @@ async def stopserver(msg):
     else:
         print(f"[INFO] No active log thread for container {container_id}")
 
-    # Edit message (fixed string quotes bug)
-    await msg.edit(
-        content=f"❌ {container['server']} Server is now offline! ❌"
-    )
-
 async def checkserversup(bot):
     print("Checking if any servers are down...")
     
     for container_id, container_data in containers.items():
-        print(f"Checking container {container_data["nick"]} for crashes...")
+        print(f"Checking container {container_data['nick']} for crashes...")
         
         if not is_server_up(container_id) and containers[container_id]["up"]:
             server_name = containers[container_id]["server"]
@@ -149,12 +142,12 @@ async def checkserversup(bot):
                 containers[container_id]["up"] = False
                 save_containers()
                 return
-            await botchannel.send(f"{server_name} server appears to be down. Attempting to restart...")
-            msg = await botchannel.send(f"{server_name} server is restarting...")
+            msg = await botchannel.send(f"{server_name} server appears to be down. Restarting...")
             containers[container_id]["starting"] = False
             containers[container_id]["up"] = False
             containers[container_id]["logging"] = False
-            await startserver(bot, msg)
+            await startserver(bot, container_id)
+            await msg.edit(content=f"{server_name} server crashed, but should be back up now.")
             print("successfully started server, hopefully...")
             containers[container_id]["lastrevive"] = time.time()
             save_containers()

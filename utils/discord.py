@@ -1,6 +1,6 @@
 import discord, asyncio
 from utils.minecraft import startserver, stopserver
-from utils.data import containers
+from utils.data import containers, save_containers
 from utils.networking import is_server_up
 
 
@@ -27,7 +27,6 @@ class ServerControlView(discord.ui.View):
     @discord.ui.button(label="Start", style=discord.ButtonStyle.success)
     async def start_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         container_id = self.container_id
-        server = containers[container_id]
 
         if is_server_up(container_id):
             return await interaction.response.send_message(
@@ -35,13 +34,13 @@ class ServerControlView(discord.ui.View):
                 ephemeral=True
             )
 
-        if server["starting"]:
+        if containers[container_id]["starting"]:
             return await interaction.response.send_message(
                 "Server is already starting...",
                 ephemeral=True
             )
 
-        if not server["server"]:
+        if not containers[container_id]["server"]:
             return await interaction.response.send_message(
                 "No server selected. Use /server first.",
                 ephemeral=True
@@ -49,13 +48,11 @@ class ServerControlView(discord.ui.View):
 
         await interaction.response.defer()
 
-        await interaction.followup.send(
-            f"🚀 Starting **{server['server']}**...",
-            wait=True
-        )
-
+        containers[container_id]["starting"] = True
+        save_containers()
+        print("starting server...")
+        asyncio.create_task(start_loop(interaction.client, container_id))  # start loop first
         await startserver(interaction.client, container_id)
-        asyncio.create_task(double_refresh(interaction.client, container_id))
 
 
     # =========================
@@ -64,7 +61,6 @@ class ServerControlView(discord.ui.View):
     @discord.ui.button(label="Stop", style=discord.ButtonStyle.danger)
     async def stop_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         container_id = self.container_id
-        server = containers[container_id]
 
         if not is_server_up(container_id):
             return await interaction.response.send_message(
@@ -74,13 +70,8 @@ class ServerControlView(discord.ui.View):
 
         await interaction.response.defer()
 
-        await interaction.followup.send(
-            "🛑 Stopping server...",
-            wait=True
-        )
-
-        await stopserver(interaction.client, container_id)
-        asyncio.create_task(double_refresh(interaction.client, container_id))
+        await stopserver(container_id)
+        await refresh_panel(interaction.client, container_id)
 
 
     # =========================
@@ -88,31 +79,25 @@ class ServerControlView(discord.ui.View):
     # =========================
     @discord.ui.button(label="Refresh", style=discord.ButtonStyle.secondary)
     async def refresh_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        container_id = self.container_id
-        server = containers[container_id]
-
-        embed = generate_embed(server)
-        view = ServerControlView(container_id)
-
-        await interaction.response.edit_message(embed=embed, view=view)
+        await refresh_panel(interaction.client, self.container_id)
 
 
 # =========================
 # EMBED BUILDER
 # =========================
-def generate_embed(server):
-    if server["starting"]:
+def generate_embed(container):
+    if container["starting"]:
         status = "Starting..."
         color = discord.Color.yellow()
-    elif server["up"]:
-        status = "On"
+    elif container["up"]:
+        status = "On ✅"
         color = discord.Color.green()
     else:
-        status = "Off"
+        status = "Off ❌"
         color = discord.Color.red()
 
     embed = discord.Embed(
-        title=f"{server['server']} Server",
+        title=f"{container['server']} Server",
         color=color
     )
 
@@ -120,7 +105,7 @@ def generate_embed(server):
 
     embed.add_field(
         name="Channels",
-        value=f"Chat: <#{server['chat_id']}>\nConsole: <#{server['console_id']}>",
+        value=f"Chat: <#{container['chat_id']}>\nConsole: <#{container['console_id']}>",
         inline=False
     )
 
@@ -134,37 +119,35 @@ def generate_embed(server):
 # PANEL MANAGEMENT
 # =========================
 async def send_control_panels(bot):
-    for container_id, server in containers.items():
-        channel = bot.get_channel(server["bot_channel_id"])
-        if not channel:
-            continue
-
-        embed = generate_embed(server)
-        view = ServerControlView(container_id)
-
-        msg = await channel.send(embed=embed, view=view)
-        server["panel_message"] = msg.id
+    for container_id in containers.keys():
+        await refresh_panel(bot, container_id)
 
 
 async def refresh_panel(bot, container_id):
-    server = containers[container_id]
-
-    channel = bot.get_channel(server["bot_channel_id"])
+    container = containers[container_id]
+    channel = await bot.fetch_channel(container["bot_channel_id"])
     if not channel:
         return
-
-    try:
-        message = await channel.fetch_message(server["panel_message"])
-    except Exception:
-        return  # message deleted or missing
-
-    embed = generate_embed(server)
+    embed = generate_embed(container)
     view = ServerControlView(container_id)
+    
+    old_msg = None
+    if container["panel_message"]:
+        try:
+            old_msg = await channel.fetch_message(int(container["panel_message"]))
+        except discord.NotFound:
+            print("Old panel message was deleted, sending a new one.")
 
-    await message.edit(embed=embed, view=view)
+    new_msg = await channel.send(embed=embed, view=view)
+    if old_msg:
+        await old_msg.delete()
+    container["panel_message"] = new_msg.id
+    save_containers()
 
-
-async def double_refresh(bot, container_id, delay=1):
-    for _ in range(3):
-        await refresh_panel(bot, container_id)
-        await asyncio.sleep(delay)
+async def start_loop(client, container_id):
+    await refresh_panel(client, container_id)
+    await asyncio.sleep(1)
+    await refresh_panel(client, container_id)
+    while containers[container_id]["starting"]:
+        await asyncio.sleep(1)
+    await refresh_panel(client, container_id)
