@@ -1,6 +1,7 @@
 import os, asyncio, socket, time, discord
 from pathlib import Path
 from dotenv import load_dotenv
+from discord.app_commands import CheckFailure
 from utils.perms import check_console_perm_msg
 from utils.data import containers, save_containers, get_containerid_from_channelid
 from utils.networking import command, is_server_up
@@ -145,7 +146,7 @@ async def checkserversup(bot):
                 await botchannel.send(f"{server_name} server has crashed twice in 10 minutes. Please check in <@&{perm_id}>")
                 containers[container_id]["up"] = False
                 save_containers()
-                return
+                continue
             msg = await botchannel.send(f"{server_name} server appears to be down. Restarting...")
             containers[container_id]["starting"] = False
             containers[container_id]["up"] = False
@@ -159,15 +160,21 @@ async def checkserversup(bot):
 
 async def handle_message(bot, message):
     container_id = get_containerid_from_channelid(message.channel.id)
-    
+
     if message.author == bot.user:
+        return
+
+    if container_id is None:
         return
 
     if message.channel.id == containers[container_id]["chat_id"]:
         command(f'tellraw @a [{{"text":"<","color":"blue","bold":true}},{{"text":"{message.author.global_name}"}},{{"text":"> ","color":"blue","bold":true}},{{"text":"{message.content}","color":"white", "bold":false}}]', container_id)
         #command(f"say §9<{message.author.global_name}>§r {message.content}", container_id)
     elif message.channel.id == containers[container_id]["console_id"]:
-        if check_console_perm_msg(message):
-            response = command(message.content, container_id)
-            if response.strip():
-                await message.channel.send(f"```{response}```")
+        try:
+            if check_console_perm_msg(message):
+                response = command(message.content, container_id)
+                if response and response.strip():
+                    await message.channel.send(f"```{response}```")
+        except CheckFailure as error:
+            await message.channel.send(str(error))

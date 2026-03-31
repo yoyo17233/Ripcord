@@ -132,9 +132,10 @@ async def refresh_panel(bot, container_id):
     view = ServerControlView(container_id)
     
     old_msg = None
-    if container["panel_message"]:
+    panel_message_id = container.get("panel_message")
+    if panel_message_id:
         try:
-            old_msg = await channel.fetch_message(int(container["panel_message"]))
+            old_msg = await channel.fetch_message(int(panel_message_id))
         except discord.NotFound:
             print("Old panel message was deleted, sending a new one.")
 

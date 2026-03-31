@@ -7,6 +7,7 @@ from utils.minecraft_io import build_log, build_whitelist, get_server_loader
 VERBOSE = True
 
 console_emptier = False
+console_emptier_task = None
 log_dict = defaultdict(list)
 active_logs = {}
 
@@ -139,7 +140,7 @@ async def handle_log_line(container_id, message, bot):
                     return
                 break
 
-    if message_type is not "none":
+    if message_type != "none":
         chatchannel = await bot.fetch_channel(containers[container_id]["chat_id"])
         await chatchannel.send(new_message)
 
@@ -157,32 +158,37 @@ def get_usernames(container_id):
 # CONSOLE BUFFER TASK
 # =========================
 async def start_log_buffer_task(bot):
-    print("[INFO] Started log buffer task...")
+    global console_emptier, console_emptier_task
+    print("Started log buffer task...")
 
-    while True:
-        log_dict_copy = dict(log_dict)
-        log_dict.clear()
+    try:
+        while True:
+            log_dict_copy = dict(log_dict)
+            log_dict.clear()
 
-        for container_id, messages in log_dict_copy.items():
-            console_channel = await bot.fetch_channel(
-                containers[container_id]["console_id"]
-            )
+            for container_id, messages in log_dict_copy.items():
+                console_channel = await bot.fetch_channel(
+                    containers[container_id]["console_id"]
+                )
 
-            joined = "\n".join(messages)
+                joined = "\n".join(messages)
 
-            # Discord message splitting
-            for i in range(0, len(joined), 1900):
-                chunk = joined[i:i+1900]
-                await console_channel.send(f"```{chunk}```")
+                # Discord message splitting
+                for i in range(0, len(joined), 1900):
+                    chunk = joined[i:i+1900]
+                    await console_channel.send(f"```{chunk}```")
 
-        await asyncio.sleep(1)
+            await asyncio.sleep(1)
+    finally:
+        console_emptier = False
+        console_emptier_task = None
 
 
 # =========================
 # START LOGGING
 # =========================
 async def startlogging(bot, container_id):
-    global console_emptier, active_logs
+    global console_emptier, console_emptier_task, active_logs
 
     await dm_superuser(
         bot,
@@ -198,9 +204,11 @@ async def startlogging(bot, container_id):
 
     stop_event = threading.Event()
 
+    loop = asyncio.get_running_loop()
+
     log_thread = threading.Thread(
         target=poll_log_file,
-        args=(container_id, bot.loop, bot, stop_event),
+        args=(container_id, loop, bot, stop_event),
         daemon=True
     )
 
@@ -216,9 +224,9 @@ async def startlogging(bot, container_id):
     await dm_superuser(bot, f"Started logging for {containers[container_id]['nick']}")
 
     # Start buffer task once
-    if not console_emptier:
+    if not console_emptier or console_emptier_task is None or console_emptier_task.done():
         console_emptier = True
-        bot.loop.create_task(start_log_buffer_task(bot))
+        console_emptier_task = loop.create_task(start_log_buffer_task(bot))
 
 
 # =========================
