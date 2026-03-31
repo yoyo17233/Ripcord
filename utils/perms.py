@@ -27,7 +27,7 @@ async def check_bot_perm(interaction: discord.Interaction) -> bool:
 def has_console_perm():
     return app_commands.check(check_console_perm)
 
-async def check_console_perm(interaction: discord.Interaction) -> bool:
+def check_console_perm(interaction: discord.Interaction) -> bool:
     containerid = get_containerid_from_interaction(interaction)
     if containerid == None:
         raise CheckFailure("No container associated with this channel.")
@@ -39,7 +39,7 @@ async def check_console_perm(interaction: discord.Interaction) -> bool:
     role_name = role.name if role else f"ID {console_perm}"
     raise CheckFailure(f'User does not have required role: {role_name}')
 
-async def check_console_perm_msg(message: discord.Message) -> bool:
+def check_console_perm_msg(message: discord.Message) -> bool:
     containerid = get_containerid_from_channelid(message.channel.id)
     if containerid == None:
         raise CheckFailure("No container associated with this channel.")

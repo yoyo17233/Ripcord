@@ -1,4 +1,4 @@
-import asyncio, os, json, threading
+import asyncio, os, json, threading, re
 from utils.utilities import dm_superuser
 from utils.data import containers
 from collections import defaultdict
@@ -37,7 +37,7 @@ def poll_log_file(container_id, loop, bot, stop_event):
                 line = line.strip()
                 if line:
                     asyncio.run_coroutine_threadsafe(
-                        send_log_to_discord(container_id, line, bot),
+                        handle_log_line(container_id, line, bot),
                         loop
                     )
 
@@ -53,52 +53,95 @@ def poll_log_file(container_id, loop, bot, stop_event):
 # =========================
 # DISCORD SENDER
 # =========================
-async def send_log_to_discord(container_id, message, bot):
-    if VERBOSE:
-        print("sending log to discord...")
-
+async def handle_log_line(container_id, message, bot):
     if not message.strip():
         return
 
     usernames = get_usernames(container_id)
 
-    # Console buffer
+    # Add log line to console buffer
     log_dict[container_id].append(message)
+
+    if "[net.minecraft.server.MinecraftServer/]" not in message:
+        return
 
     loader = get_server_loader(containers[container_id]["server"])
 
-    # =========================
-    # CHAT DETECTION
-    # =========================
-    if "<" in message and ">" in message and "[Rcon] <" not in message:
+    index = "[net.minecraft.server.MinecraftServer/]: "
+
+    valid_loaders = ["vanilla", "neoforge", "spigot"] # Currently implemented loaders
+
+    if loader == "neoforge":
+        neoforge_index = "[net.minecraft.server.MinecraftServer/]: "
+        if neoforge_index not in message:
+            return
+        index = neoforge_index
+
+    if loader == "vanilla":
+        vanilla_index = "[Server thread/INFO]: "
+        if vanilla_index not in message:
+            return
+        index = vanilla_index
+
+    if loader == "spigot":
+        spigot_index = "INFO]: "
+        if spigot_index not in message:
+            return
+        index = spigot_index
+
+    if loader not in valid_loaders: # Legacy handling, may not work
+        print(f"unrecognized loader {loader}, using legacy log parsing (may not work)")
+        # =========================
+        # CHAT DETECTION
+        # =========================
+        if "<" in message and ">" in message and "[Rcon] <" not in message:
+            chat_name = re.search(r'<([^>]*)>', message).group(1)
+            for username in usernames:
+                if username in chat_name:
+                    chatchannel = await bot.fetch_channel(containers[container_id]["chat_id"])
+                    await chatchannel.send(f"```{chat_name}: {message[message.index('> '):]}```")
+                    return
+
+        # =========================
+        # OTHER USER EVENTS
+        # =========================
         if loader == "vanilla":
-            newmessage = message[message.index('<')+1:]
-        elif loader == "neoforge":
+            newmessage = message[message.index('<')+1:] if "<" in message else message
+        elif loader in ["neoforge", "forge"]:
             newmessage = message.split("]:", 1)[-1].strip()
-        elif loader == "forge":
-            newmessage = message.split("]: ", 1)[-1].strip()
         else:
             return
 
-        if newmessage[1:].startswith(tuple(usernames)):
+        if newmessage.startswith(tuple(usernames)):
             chatchannel = await bot.fetch_channel(containers[container_id]["chat_id"])
-            await chatchannel.send(f"```{message[message.index('<'):]}```")
-            return
-
-    # =========================
-    # OTHER USER EVENTS
-    # =========================
-    if loader == "vanilla":
-        newmessage = message[message.index('<')+1:] if "<" in message else message
-    elif loader in ["neoforge", "forge"]:
-        newmessage = message.split("]:", 1)[-1].strip()
-    else:
+            await chatchannel.send(f"```{newmessage}```")
         return
 
-    if newmessage.startswith(tuple(usernames)):
-        chatchannel = await bot.fetch_channel(containers[container_id]["chat_id"])
-        await chatchannel.send(f"```{newmessage}```")
+    raw_message = message.split(index, 1)[-1].strip()
+    new_message = raw_message
+    message_type = "none"
 
+    # Player Message
+    for username in usernames:
+        if "<" in raw_message and ">" in raw_message:
+            if username in raw_message[:raw_message.index(">")]:
+                new_message = f"```{username}: {raw_message.split('>', 1)[-1].strip()}```"
+                message_type = "message"
+                break
+
+    # Player Event
+    if message_type == "none":
+        for username in usernames:
+            if username in raw_message:
+                new_message = f"```{raw_message}```"
+                message_type = "event"
+                if ":" in new_message:
+                    return
+                break
+
+    if message_type is not "none":
+        chatchannel = await bot.fetch_channel(containers[container_id]["chat_id"])
+        await chatchannel.send(new_message)
 
 # =========================
 # WHITELIST READER

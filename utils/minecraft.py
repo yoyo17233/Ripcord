@@ -85,11 +85,13 @@ async def startserver(bot, container_id):
         generate_run_bat(server_name)
 
     print("starting " + containers[container_id]["server"] + " server")
+    print("running command: " + build_run(containers[container_id]["server"]))
     await asyncio.create_subprocess_shell(
         build_run(containers[container_id]["server"]),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE
     )
+    print("started server process, now waiting for server to come up...")
     await server_start_loop(bot, container_id)
     return True
 
@@ -156,20 +158,14 @@ async def checkserversup(bot):
             save_containers()
 
 async def handle_message(bot, message):
-    if isinstance(message.channel, discord.DMChannel):
-        print("message channel is DM, skipping")
-        return
-    
     container_id = get_containerid_from_channelid(message.channel.id)
-    if message.channel.id == containers[container_id]["bot_channel_id"]:
-        #!!!TODO reload embed
-        pass
     
     if message.author == bot.user:
         return
 
     if message.channel.id == containers[container_id]["chat_id"]:
-        command(f"say §9<{message.author.global_name}>§r {message.content}", container_id)
+        command(f'tellraw @a [{{"text":"<","color":"blue","bold":true}},{{"text":"{message.author.global_name}"}},{{"text":"> ","color":"blue","bold":true}},{{"text":"{message.content}","color":"white", "bold":false}}]', container_id)
+        #command(f"say §9<{message.author.global_name}>§r {message.content}", container_id)
     elif message.channel.id == containers[container_id]["console_id"]:
         if check_console_perm_msg(message):
             response = command(message.content, container_id)

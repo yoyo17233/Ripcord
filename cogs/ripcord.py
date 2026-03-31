@@ -3,12 +3,12 @@ from discord.ext import commands, tasks
 from discord import app_commands
 from discord.app_commands import AppCommandError, CheckFailure
 from utils.perms import has_bot_perm, is_admin, check_is_server_up, is_bot_channel
-from utils.minecraft import checkserversup,  handle_message
+from utils.minecraft import checkserversup, handle_message
 from utils.minecraft_io import get_server_loader
 from utils.polling import get_active_log_names
-from utils.data import containers, save_containers, servers, create_container, get_containerid_from_interaction
+from utils.data import containers, get_containerid_from_channelid, save_containers, servers, create_container, get_containerid_from_interaction
 from utils.networking import is_server_up, command
-from utils.discord import ServerControlView
+from utils.discord import refresh_panel
 from typing import Union
 
 async def server_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
@@ -52,6 +52,14 @@ class Ripcord(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message):
+        if isinstance(message.channel, discord.DMChannel):
+            print("message channel is DM, skipping")
+            return
+        if message.author == self.bot.user:
+            return
+        if message.channel.id in [container_data.get("bot_channel_id") for container_data in containers.values()]:
+            await refresh_panel(self.bot, get_containerid_from_channelid(message.channel.id))
+            return
         await handle_message(self.bot, message)
 
     @app_commands.command(name="createcontainer", description="Creates a new container object to hold a server")
@@ -94,6 +102,7 @@ class Ripcord(commands.Cog):
             await interaction.response.send_message(
             f"The container is already up with server {server}."
             f"You must first stop it with /stop to change the server.", ephemeral=True)
+            return
         
         containers[container_id]["server"] = server
         save_containers()
