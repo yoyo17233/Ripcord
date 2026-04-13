@@ -1,6 +1,6 @@
 import asyncio, os, json, threading, re
 from utils.utilities import dm_superuser
-from utils.data import containers
+from utils.data import containers, save_containers
 from collections import defaultdict
 from utils.minecraft_io import build_log, build_whitelist, get_server_loader
 
@@ -136,7 +136,13 @@ async def handle_log_line(container_id, message, bot):
             if username in raw_message:
                 new_message = f"```{raw_message}```"
                 message_type = "event"
-                if ":" in new_message:
+                if "joined the game" in raw_message:
+                    containers[container_id]["players"] = containers[container_id].get("players", []) + [username]
+                    save_containers()
+                if "left the game" in raw_message:
+                    containers[container_id]["players"] = [player for player in containers[container_id]["players"] if player != username]
+                    save_containers()
+                if ":" in new_message: # Handles /list
                     return
                 break
 

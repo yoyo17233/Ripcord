@@ -27,7 +27,8 @@ DEFAULT_CONTAINER = {
     "up":False,
     "starting":False,
     "lastrevive":0,
-    "panel_message": 0
+    "panel_message": 0,
+    "players": []
 }
 
 def load_containers():

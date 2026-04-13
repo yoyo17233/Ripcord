@@ -63,6 +63,7 @@ async def setup_hook():
             await startlogging(bot, container_id)
         else:
             containers[container_id]["logging"] = False
+    containers[container_id]["players"] = []
     save_containers()
 
 bot.run(TOKEN)
