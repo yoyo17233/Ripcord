@@ -5,8 +5,7 @@ from utils.data import containers
 
 load_dotenv()
 
-local_ip = socket.gethostbyname(socket.gethostname())
-RCON_IP = local_ip
+RCON_IP = socket.gethostbyname(socket.gethostname())
 RCON_PASSWORD = os.getenv("RCON_PASSWORD")
 
 def is_server_up(container_id):
