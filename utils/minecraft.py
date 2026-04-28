@@ -105,6 +105,7 @@ async def stopserver(container_id):
     # Update state
     container["up"] = False
     container["logging"] = False
+    container["players"] = []
     save_containers()
 
     # Stop logging thread (gracefully)
