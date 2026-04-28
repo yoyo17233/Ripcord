@@ -138,9 +138,13 @@ async def handle_log_line(container_id, message, bot):
                 message_type = "event"
                 if "joined the game" in raw_message:
                     containers[container_id]["players"] = containers[container_id].get("players", []) + [username]
+                    from utils.discord import refresh_panel
+                    await refresh_panel(bot, container_id)
                     save_containers()
                 if "left the game" in raw_message:
                     containers[container_id]["players"] = [player for player in containers[container_id]["players"] if player != username]
+                    from utils.discord import refresh_panel
+                    await refresh_panel(bot, container_id)
                     save_containers()
                 if ":" in new_message: # Handles /list
                     return

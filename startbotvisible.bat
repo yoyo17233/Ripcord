@@ -1,3 +1,4 @@
 cd /d "%~dp0"
-start "" python main.py
+python main.py
+pause
 exit
