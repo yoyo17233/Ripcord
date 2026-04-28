@@ -121,6 +121,7 @@ async def handle_log_line(container_id, message, bot):
     raw_message = message.split(index, 1)[-1].strip()
     new_message = raw_message
     message_type = "none"
+    refresh_needed = False
 
     # Player Message
     for username in usernames:
@@ -137,11 +138,22 @@ async def handle_log_line(container_id, message, bot):
                 new_message = f"```{raw_message}```"
                 message_type = "event"
                 if "joined the game" in raw_message:
-                    containers[container_id]["players"] = containers[container_id].get("players", []) + [username]
-                    save_containers()
+                    players = containers[container_id].get("players", [])
+                    if not isinstance(players, list):
+                        players = []
+                    if username not in players:
+                        containers[container_id]["players"] = players + [username]
+                        save_containers()
+                        refresh_needed = True
                 if "left the game" in raw_message:
-                    containers[container_id]["players"] = [player for player in containers[container_id]["players"] if player != username]
-                    save_containers()
+                    players = containers[container_id].get("players", [])
+                    if not isinstance(players, list):
+                        players = []
+                    updated_players = [player for player in players if player != username]
+                    if updated_players != players:
+                        containers[container_id]["players"] = updated_players
+                        save_containers()
+                        refresh_needed = True
                 if ":" in new_message: # Handles /list
                     return
                 break
@@ -149,6 +161,9 @@ async def handle_log_line(container_id, message, bot):
     if message_type != "none":
         chatchannel = await bot.fetch_channel(containers[container_id]["chat_id"])
         await chatchannel.send(new_message)
+        if refresh_needed:
+            from utils.discord import refresh_panel
+            await refresh_panel(bot, container_id)
 
 # =========================
 # WHITELIST READER

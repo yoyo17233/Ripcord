@@ -97,7 +97,11 @@ def generate_embed(container):
         color = discord.Color.red()
 
     playerlist = container.get("players", [])
-    num = len(playerlist) if isinstance(playerlist, list) else 0
+    if not isinstance(playerlist, list):
+        playerlist = []
+
+    num = len(playerlist)
+    player_value = "\n".join(playerlist) if playerlist else "No players online."
 
     embed = discord.Embed(
         title=f"{container['server']} Server",
@@ -106,7 +110,7 @@ def generate_embed(container):
 
     embed.add_field(name="Server Status", value=status, inline=True)
 
-    embed.add_field(name=f"Playerlist ({num})", value="\n".join(container.get("players", ["No players online."])), inline=True) # Might need to change newlines
+    embed.add_field(name=f"Playerlist ({num})", value=player_value, inline=True)
 
     embed.add_field(
         name="Channels",

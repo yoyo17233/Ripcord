@@ -57,13 +57,13 @@ async def setup_hook():
 
     for container_id, container_data in containers.items():
         containers[container_id]["starting"] = False
+        containers[container_id]["players"] = []
         if is_server_up(container_id):
             containers[container_id]["up"] = True
             print(f"Starting logging for container {container_data['nick']}")
             await startlogging(bot, container_id)
         else:
             containers[container_id]["logging"] = False
-    containers[container_id]["players"] = []
     save_containers()
 
 bot.run(TOKEN)
