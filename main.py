@@ -2,12 +2,11 @@ import os
 from dotenv import load_dotenv
 import discord
 from discord.ext import commands
-from utils.utilities import dm_superuser
+from utils.utilities import dm_superuser, log
 from utils.data import init_guilds, containers, save_containers
 from utils.networking import is_server_up
 from utils.polling import startlogging, init_playerlists
 from utils.discord import send_control_panels
-from utils.autorestart import parse_autorestart_time
 
 VERBOSE = True
 
@@ -36,10 +35,10 @@ async def on_ready():
     await init_playerlists(bot)
     await send_control_panels(bot)
 
-    print(f"Logged in as {bot.user}")
+    log(f"Logged in as {bot.user}")
     try:
         synced = await bot.tree.sync()
-        print(f"Synced {len(synced)} slash commands")
+        log(f"Synced {len(synced)} slash commands")
         
         await bot.change_presence(
             activity=discord.Game(f"Minecraft ✅"),
@@ -47,7 +46,7 @@ async def on_ready():
         )
 
     except Exception as e:
-        print(f"Error syncing commands: {e}")
+        log(f"Error syncing commands: {e}")
 
 async def load_cogs():
     await bot.load_extension("cogs.ripcord")
@@ -62,7 +61,7 @@ async def setup_hook():
         containers[container_id]["players"] = []
         if is_server_up(container_id):
             containers[container_id]["up"] = True
-            print(f"Starting logging for container {container_data['nick']}")
+            log(f"Starting logging for container {container_data['nick']}")
             await startlogging(bot, container_id)
         else:
             containers[container_id]["logging"] = False

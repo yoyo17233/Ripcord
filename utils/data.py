@@ -2,6 +2,7 @@ import copy
 import json, os, discord, uuid
 from dotenv import load_dotenv
 from pathlib import Path
+from utils.utilities import log
 
 load_dotenv()
 CONTAINER_FILE = "containers.json"
@@ -67,7 +68,7 @@ def init_guilds(bot):
 
         if guild_id not in bot_guild_ids:
             to_delete.append(container_key)
-            print(f"Deleted container {container_key} for missing guild {guild_id}")
+            log(f"Deleted container {container_key} for missing guild {guild_id}")
 
     for k in to_delete:
         del containers[k]

@@ -1,6 +1,6 @@
 import asyncio, os, json, threading, re
 
-from utils.utilities import dm_superuser
+from utils.utilities import dm_superuser, log
 from utils.data import containers, save_containers
 from collections import defaultdict
 from utils.networking import command
@@ -45,12 +45,12 @@ def poll_log_file(container_id, loop, bot, stop_event):
                     )
 
         except Exception as e:
-            print(f"[ERROR] Log reader crashed: {e}")
+            log(f"Log reader crashed: {e}", "ERROR")
 
         # Better than time.sleep → instant shutdown
         stop_event.wait(1)
 
-    #print(f"[INFO] Thread for container {container_id} shutting down cleanly.")
+    #log(f"[INFO] Thread for container {container_id} shutting down cleanly.")
 
 
 async def init_playerlists(bot):
@@ -107,7 +107,7 @@ async def handle_log_line(container_id, message, bot):
         index = spigot_index
 
     if loader not in valid_loaders: # Legacy handling, may not work
-        print(f"unrecognized loader {loader}, using legacy log parsing (may not work)")
+        log(f"Unrecognized loader {loader}, using legacy log parsing (may not work)")
         # =========================
         # CHAT DETECTION
         # =========================
@@ -196,7 +196,7 @@ def get_usernames(container_id):
 # =========================
 async def start_log_buffer_task(bot):
     global console_emptier, console_emptier_task
-    print("Started global log handling...")
+    log("Started global log handling")
 
     try:
         while True:
@@ -268,26 +268,26 @@ async def startlogging(bot, container_id):
 # =========================
 def stop_logging(container_id):
     if container_id not in active_logs:
-        print(f"[INFO] No active thread for container {container_id}")
+        log(f"No active thread for container {containers[container_id]['nick']}")
         return False
 
     data = active_logs[container_id]
     thread = data["thread"]
     stop_event = data["stop_event"]
 
-    #print(f"[INFO] Stopping thread for container {container_id}...")
+    #log(f"Stopping thread for container {container_id}...")
 
     stop_event.set()
     thread.join(timeout=5)
 
     if thread.is_alive():
-        print(f"[WARN] Thread did not stop in time.")
+        log(f"{containers[container_id]['nick']} container log did not stop in time", "WARN")
         return False
 
     del active_logs[container_id]
     containers[container_id]["logging"] = False
 
-    print(f"[INFO] Thread stopped cleanly.")
+    log(f"{containers[container_id]['nick']} container log stopped cleanly")
     return True
 
 def get_active_log_names():

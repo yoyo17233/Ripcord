@@ -7,6 +7,7 @@ from utils.data import containers, save_containers, get_containerid_from_channel
 from utils.networking import command, is_server_up
 from utils.minecraft_io import build_run, read_server_properties, write_server_properties, generate_run_bat
 from utils.polling import startlogging, active_logs, stop_logging
+from utils.utilities import log
 
 load_dotenv()
 
@@ -44,16 +45,16 @@ async def server_start_loop(bot, container_id):
             save_containers()
             return
         if is_server_up(container_id):
-            #print("server is up")
+            #log("server is up")
             containers[container_id]["up"] = True
             save_containers()
             if not containers[container_id]["logging"]:
-                print("log is off, starting log")
+                log(f"Starting logging for {containers[container_id]['server']} server in container {containers[container_id]['nick']}")
                 await startlogging(bot, container_id)
-            #print("serverstarting setting to 0...")
+            #log("serverstarting setting to 0...")
             containers[container_id]["starting"] = False
             save_containers()
-            #print("serverstarting successfully set to 0")
+            #log("serverstarting successfully set to 0")
             return
         await asyncio.sleep(POLLSECONDS)
 
@@ -80,19 +81,19 @@ async def startserver(bot, container_id):
     write_server_properties(server_name, server_props)
 
     runfilepath = SERVER_DIR / server_name / "run.bat"
-    #print(f"checking for path {runfilepath}")
+    #log(f"checking for path {runfilepath}")
     if not os.path.exists(runfilepath):
-        print("generating run.bat")
+        log("Generating run.bat")
         generate_run_bat(server_name)
 
-    #print("starting " + containers[container_id]["server"] + " server")
-    #print("running command: " + build_run(containers[container_id]["server"]))
+    #log("starting " + containers[container_id]["server"] + " server")
+    #log("running command: " + build_run(containers[container_id]["server"]))
     await asyncio.create_subprocess_shell(
         build_run(containers[container_id]["server"]),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE
     )
-    #print("started server process, now waiting for server to come up...")
+    #log("started server process, now waiting for server to come up...")
     await server_start_loop(bot, container_id)
     return True
 
@@ -110,25 +111,24 @@ async def stopserver(container_id):
 
     # Stop logging thread (gracefully)
     if container_id in active_logs:
-        print(f"[INFO] Stopping log thread for container {containers[container_id]['nick']}...")
+        #log(f"Stopping log thread for container {containers[container_id]['nick']}...")
         stopped = await asyncio.to_thread(stop_logging, container_id)
 
         if not stopped:
-            print(f"[WARN] Thread did not shut down cleanly for {containers[container_id]['nick']}")
+            log(f"Thread did not shut down cleanly for {containers[container_id]['nick']}", "WARN")
     else:
-        print(f"[INFO] No active log thread for container {containers[container_id]['nick']}")
+        log(f"No active log thread for container {containers[container_id]['nick']}")
 
 async def checkserversup(bot):
     from utils.discord import refresh_panel, start_loop
-    #print("Checking if any servers are down...")
+    #log("Checking if any servers are down...")
     
     for container_id, container_data in containers.items():
-        #print(f"Checking container {container_data['nick']} for crashes...")
+        #log(f"Checking container {container_data['nick']} for crashes...")
         
         if not is_server_up(container_id) and containers[container_id]["up"]:
             await refresh_panel(bot, container_id)
-            server_name = containers[container_id]["server"]
-            print(f"Server crashed for container: {container_id}, on server {server_name}, restarting...")
+            log(f"{containers[container_id]['server']} crashed in container {containers[container_id]['nick']}, restarting")
             
             channel_id = container_data["bot_channel_id"]
             botchannel = bot.get_channel(channel_id)
@@ -138,13 +138,13 @@ async def checkserversup(bot):
             
             previousrevive = containers[container_id]["lastrevive"]
             if time.time() - previousrevive < 600:
-                print("Two crashes within 10 minutes, catestrophic error:")
+                log("Two crashes within 10 minutes, catastrophic error")
                 perm_id = containers[container_id]["bot_perm"]
-                await botchannel.send(f"{server_name} server has crashed twice in 10 minutes. Please check in <@&{perm_id}>")
+                await botchannel.send(f"{containers[container_id]["server"]} server has crashed twice in 10 minutes. Please check in <@&{perm_id}>")
                 containers[container_id]["up"] = False
                 save_containers()
                 continue
-            msg = await botchannel.send(f"{server_name} server appears to be down. Restarting...")
+            msg = await botchannel.send(f"{containers[container_id]["server"]} server appears to be down. Restarting...")
             containers[container_id]["starting"] = False
             containers[container_id]["up"] = False
             containers[container_id]["logging"] = False
@@ -152,8 +152,8 @@ async def checkserversup(bot):
             save_containers()
             asyncio.create_task(start_loop(bot, container_id))  # start loop first
             await startserver(bot, container_id)
-            await msg.edit(content=f"{server_name} server crashed, but is now back online.")
-            print("successfully started server after crash")
+            await msg.edit(content=f"{containers[container_id]["server"]} server crashed, but is now back online.")
+            log(f"{containers[container_id]['server']} server in container {containers[container_id]['nick']} is back online after crash")
             containers[container_id]["lastrevive"] = time.time()
             save_containers()
 

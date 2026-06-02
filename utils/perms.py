@@ -1,13 +1,11 @@
-import discord, os
+import discord
 from discord.app_commands import CheckFailure
 from discord import app_commands
 from utils.data import containers, get_containerid_from_interaction, get_containerid_from_channelid
 from utils.networking import is_server_up
+from utils.utilities import superusers
 
 VERBOSE = True
-
-SUPERUSERS = os.getenv("SUPERUSERS")
-superusers = [int(x) for x in SUPERUSERS.split(",") if x.strip()]
 
 def has_bot_perm():
     return app_commands.check(check_bot_perm)

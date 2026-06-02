@@ -2,7 +2,7 @@ import discord, asyncio
 from utils.minecraft import startserver, stopserver
 from utils.data import containers, save_containers
 from utils.networking import is_server_up
-
+from utils.utilities import log
 
 # =========================
 # VIEW
@@ -50,7 +50,7 @@ class ServerControlView(discord.ui.View):
 
         containers[container_id]["starting"] = True
         save_containers()
-        print("starting server...")
+        log(f"Starting {containers[container_id]['server']} server in container {containers[container_id]['nick']}")
         asyncio.create_task(start_loop(interaction.client, container_id))  # start loop first
         await startserver(interaction.client, container_id)
 

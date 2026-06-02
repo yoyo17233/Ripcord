@@ -2,6 +2,7 @@ import os, socket
 from dotenv import load_dotenv
 from mcrcon import MCRcon
 from utils.data import containers
+from utils.utilities import log
 
 load_dotenv()
 
@@ -23,5 +24,5 @@ def command(command_name, container_id):
         return response
     except Exception as e:
         error_message = f"RCON command failed: {e}"
-        print(error_message)
+        log(error_message)
         return error_message

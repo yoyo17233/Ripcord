@@ -10,6 +10,7 @@ from utils.data import containers, get_containerid_from_channelid, save_containe
 from utils.networking import is_server_up, command
 from utils.discord import refresh_panel
 from utils.autorestart import restart_precheck, parse_autorestart_time, restore_autorestarting_servers, run_restart_script, stop_running_servers_for_restart, validate_autorestart_time
+from utils.utilities import log
 from typing import Union
 
 async def server_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
@@ -58,11 +59,11 @@ class Ripcord(commands.Cog):
         self.checkservervalue.start()
         self.autorestart_time = parse_autorestart_time()
         if self.autorestart_time is None:
-            print("Auto restart disabled")
+            log("Auto restart disabled")
         else:
             hour, minute = self.autorestart_time
             validate_autorestart_time(hour, minute)
-            print(f"Auto restart scheduled daily at {hour:02d}:{minute:02d}")
+            log(f"Auto restart scheduled daily at {hour:02d}:{minute:02d}")
             local_timezone = datetime.datetime.now().astimezone().tzinfo
             self.autorestartpc.change_interval(
                 time=datetime.time(hour=hour, minute=minute, tzinfo=local_timezone)
@@ -294,13 +295,13 @@ class Ripcord(commands.Cog):
     async def cog_app_command_error(self, interaction: discord.Interaction, error: AppCommandError):
         if isinstance(error, CheckFailure):
             if interaction.response.is_done():
-                print(f"Check failed: {type(error).__name__}, message: {error}")
+                log(f"Check failed: {type(error).__name__}, message: {error}")
                 await interaction.followup.send(f"Error: {error}", ephemeral=True)
             else:
-                print(f"Check failed: {type(error).__name__}, message: {error}")
+                log(f"Check failed: {type(error).__name__}, message: {error}")
                 await interaction.response.send_message(f"Error: {error}", ephemeral=True)
         else:
-            print(f"Unhandled error: {error}")
+            log(f"Unhandled error: {error}")
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Ripcord(bot))
