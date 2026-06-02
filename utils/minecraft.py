@@ -120,10 +120,10 @@ async def stopserver(container_id):
 
 async def checkserversup(bot):
     from utils.discord import refresh_panel, start_loop
-    print("Checking if any servers are down...")
+    #print("Checking if any servers are down...")
     
     for container_id, container_data in containers.items():
-        print(f"Checking container {container_data['nick']} for crashes...")
+        #print(f"Checking container {container_data['nick']} for crashes...")
         
         if not is_server_up(container_id) and containers[container_id]["up"]:
             await refresh_panel(bot, container_id)

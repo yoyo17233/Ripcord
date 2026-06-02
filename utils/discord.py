@@ -150,7 +150,13 @@ async def refresh_panel(bot, container_id):
 
     new_msg = await channel.send(embed=embed, view=view)
     if old_msg:
-        await old_msg.delete()
+        for _ in range(3):
+            try:
+                await old_msg.delete()
+                break
+            except discord.HTTPException:
+                await asyncio.sleep(2)
+
     container["panel_message"] = new_msg.id
     save_containers()
 

@@ -1,7 +1,9 @@
 import asyncio, os, json, threading, re
+
 from utils.utilities import dm_superuser
 from utils.data import containers, save_containers
 from collections import defaultdict
+from utils.networking import command
 from utils.minecraft_io import build_log, build_whitelist, get_server_loader
 
 VERBOSE = True
@@ -50,6 +52,20 @@ def poll_log_file(container_id, loop, bot, stop_event):
 
     print(f"[INFO] Thread for container {container_id} shutting down cleanly.")
 
+
+async def init_playerlists(bot):
+    for container_id in containers:
+        if containers[container_id]["up"]:
+            usernames = get_usernames(container_id)
+            real_players = []
+            response = command("list", container_id)
+            players = response.split(": ", 1)[1].strip().split(", ") if ": " in response else []
+            for player in players:
+                for username in usernames:
+                    if username in player:
+                        real_players.append(username)
+            containers[container_id]["players"] = real_players
+    save_containers()
 
 # =========================
 # DISCORD SENDER
@@ -180,7 +196,7 @@ def get_usernames(container_id):
 # =========================
 async def start_log_buffer_task(bot):
     global console_emptier, console_emptier_task
-    print("Started log buffer task...")
+    print("Started global log handling...")
 
     try:
         while True:
@@ -211,10 +227,7 @@ async def start_log_buffer_task(bot):
 async def startlogging(bot, container_id):
     global console_emptier, console_emptier_task, active_logs
 
-    await dm_superuser(
-        bot,
-        f"ATTEMPTING TO START LOGGING FOR {containers[container_id]['nick']}"
-    )
+    #await dm_superuser(bot, f"ATTEMPTING TO START LOGGING FOR {containers[container_id]['nick']}")
 
     # Already running?
     if container_id in active_logs:

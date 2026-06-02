@@ -26,6 +26,7 @@ DEFAULT_CONTAINER = {
     "logging":False,
     "up":False,
     "starting":False,
+    "autorestarting":False,
     "lastrevive":0,
     "panel_message": 0,
     "players": []
