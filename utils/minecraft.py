@@ -1,7 +1,7 @@
 import os, asyncio, socket, time, discord
 from pathlib import Path
 from dotenv import load_dotenv
-from utils.utilities import animate
+from discord.app_commands import CheckFailure
 from utils.perms import check_console_perm_msg
 from utils.data import containers, save_containers, get_containerid_from_channelid
 from utils.networking import command, is_server_up
@@ -35,14 +35,11 @@ cd /d "%~dp0"
 exit
 '''
         
-async def server_start_loop(bot, msg):
-    container_id = get_containerid_from_channelid(msg.channel.id)
+async def server_start_loop(bot, container_id):
     containers[container_id]["starting"] = True
     starttime = time.time()
-    asyncio.create_task(animate(msg))
     while containers[container_id]["starting"]:
         if time.time() - starttime > 300:
-            await msg.edit(content=f"❌ Server failed to start within 5 minutes.")
             containers[container_id]["starting"] = False
             save_containers()
             return
@@ -57,12 +54,10 @@ async def server_start_loop(bot, msg):
             containers[container_id]["starting"] = False
             save_containers()
             print("serverstarting successfully set to 0")
-            await msg.edit(content=f"✅ {containers[container_id]["server"]} Server is now online! ✅")
             return
         await asyncio.sleep(POLLSECONDS)
 
-async def startserver(bot, msg):
-    container_id = get_containerid_from_channelid(msg.channel.id)
+async def startserver(bot, container_id):
     server_name = containers[container_id]["server"]
 
     server_props = read_server_properties(server_name)
@@ -91,15 +86,17 @@ async def startserver(bot, msg):
         generate_run_bat(server_name)
 
     print("starting " + containers[container_id]["server"] + " server")
+    print("running command: " + build_run(containers[container_id]["server"]))
     await asyncio.create_subprocess_shell(
         build_run(containers[container_id]["server"]),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE
     )
-    await server_start_loop(bot, msg)
+    print("started server process, now waiting for server to come up...")
+    await server_start_loop(bot, container_id)
+    return True
 
-async def stopserver(msg):
-    container_id = get_containerid_from_channelid(msg.channel.id)
+async def stopserver(container_id):
     container = containers[container_id]
 
     # Stop the Minecraft server
@@ -108,6 +105,7 @@ async def stopserver(msg):
     # Update state
     container["up"] = False
     container["logging"] = False
+    container["players"] = []
     save_containers()
 
     # Stop logging thread (gracefully)
@@ -120,18 +118,15 @@ async def stopserver(msg):
     else:
         print(f"[INFO] No active log thread for container {container_id}")
 
-    # Edit message (fixed string quotes bug)
-    await msg.edit(
-        content=f"❌ {container['server']} Server is now offline! ❌"
-    )
-
 async def checkserversup(bot):
-    print("Checking if any servers are down...")
+    from utils.discord import refresh_panel, start_loop
+    #print("Checking if any servers are down...")
     
     for container_id, container_data in containers.items():
-        print(f"Checking container {container_data["nick"]} for crashes...")
+        #print(f"Checking container {container_data['nick']} for crashes...")
         
         if not is_server_up(container_id) and containers[container_id]["up"]:
+            await refresh_panel(bot, container_id)
             server_name = containers[container_id]["server"]
             print(f"Server crashed for container: {container_id}, on server {server_name}, restarting...")
             
@@ -152,34 +147,37 @@ async def checkserversup(bot):
                 await botchannel.send(f"{server_name} server has crashed twice in 10 minutes. Please check in <@&{perm_id}>")
                 containers[container_id]["up"] = False
                 save_containers()
-                return
-            await botchannel.send(f"{server_name} server appears to be down. Attempting to restart...")
-            msg = await botchannel.send(f"{server_name} server is restarting...")
+                continue
+            msg = await botchannel.send(f"{server_name} server appears to be down. Restarting...")
             containers[container_id]["starting"] = False
             containers[container_id]["up"] = False
             containers[container_id]["logging"] = False
-            await startserver(bot, msg)
+            containers[container_id]["players"] = []
+            save_containers()
+            asyncio.create_task(start_loop(bot, container_id))  # start loop first
+            await startserver(bot, container_id)
+            await msg.edit(content=f"{server_name} server crashed, but should be back up now.")
             print("successfully started server, hopefully...")
             containers[container_id]["lastrevive"] = time.time()
             save_containers()
 
 async def handle_message(bot, message):
-    if isinstance(message.channel, discord.DMChannel):
-        print("message channel is DM, skipping")
-        return
-    
     container_id = get_containerid_from_channelid(message.channel.id)
-    if message.channel.id == containers[container_id]["bot_channel_id"]:
-        #!!!TODO reload embed
-        pass
-    
+
     if message.author == bot.user:
         return
 
+    if container_id is None:
+        return
+
     if message.channel.id == containers[container_id]["chat_id"]:
-        command(f"say §9<{message.author.global_name}>§r {message.content}", container_id)
+        command(f'tellraw @a [{{"text":"<","color":"blue","bold":true}},{{"text":"{message.author.global_name}"}},{{"text":"> ","color":"blue","bold":true}},{{"text":"{message.content}","color":"white", "bold":false}}]', container_id)
+        #command(f"say §9<{message.author.global_name}>§r {message.content}", container_id)
     elif message.channel.id == containers[container_id]["console_id"]:
-        if check_console_perm_msg(message):
-            response = command(message.content, container_id)
-            if response.strip():
-                await message.channel.send(f"```{response}```")
+        try:
+            if check_console_perm_msg(message):
+                response = command(message.content, container_id)
+                if response and response.strip():
+                    await message.channel.send(f"```{response}```")
+        except CheckFailure as error:
+            await message.channel.send(str(error))

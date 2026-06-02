@@ -5,7 +5,9 @@ from discord.ext import commands
 from utils.utilities import dm_superuser
 from utils.data import init_guilds, containers, save_containers
 from utils.networking import is_server_up
-from utils.polling import startlogging
+from utils.polling import startlogging, init_playerlists
+from utils.discord import send_control_panels
+from utils.autorestart import parse_autorestart_time
 
 VERBOSE = True
 
@@ -31,6 +33,8 @@ async def on_ready():
     await dm_superuser(bot, "on_ready passed init check")
 
     init_guilds(bot)
+    await init_playerlists(bot)
+    await send_control_panels(bot)
 
     print(f"Logged in as {bot.user}")
     try:
@@ -55,6 +59,7 @@ async def setup_hook():
 
     for container_id, container_data in containers.items():
         containers[container_id]["starting"] = False
+        containers[container_id]["players"] = []
         if is_server_up(container_id):
             containers[container_id]["up"] = True
             print(f"Starting logging for container {container_data['nick']}")

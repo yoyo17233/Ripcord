@@ -1,12 +1,15 @@
-import asyncio, os, json, threading
+import asyncio, os, json, threading, re
+
 from utils.utilities import dm_superuser
-from utils.data import containers
+from utils.data import containers, save_containers
 from collections import defaultdict
+from utils.networking import command
 from utils.minecraft_io import build_log, build_whitelist, get_server_loader
 
 VERBOSE = True
 
 console_emptier = False
+console_emptier_task = None
 log_dict = defaultdict(list)
 active_logs = {}
 
@@ -37,7 +40,7 @@ def poll_log_file(container_id, loop, bot, stop_event):
                 line = line.strip()
                 if line:
                     asyncio.run_coroutine_threadsafe(
-                        send_log_to_discord(container_id, line, bot),
+                        handle_log_line(container_id, line, bot),
                         loop
                     )
 
@@ -50,55 +53,133 @@ def poll_log_file(container_id, loop, bot, stop_event):
     print(f"[INFO] Thread for container {container_id} shutting down cleanly.")
 
 
+async def init_playerlists(bot):
+    for container_id in containers:
+        if containers[container_id]["up"]:
+            usernames = get_usernames(container_id)
+            real_players = []
+            response = command("list", container_id)
+            players = response.split(": ", 1)[1].strip().split(", ") if ": " in response else []
+            for player in players:
+                for username in usernames:
+                    if username in player:
+                        real_players.append(username)
+            containers[container_id]["players"] = real_players
+    save_containers()
+
 # =========================
 # DISCORD SENDER
 # =========================
-async def send_log_to_discord(container_id, message, bot):
-    if VERBOSE:
-        print("sending log to discord...")
-
+async def handle_log_line(container_id, message, bot):
     if not message.strip():
         return
 
     usernames = get_usernames(container_id)
 
-    # Console buffer
+    # Add log line to console buffer
     log_dict[container_id].append(message)
+
+    if "[net.minecraft.server.MinecraftServer/]" not in message:
+        return
 
     loader = get_server_loader(containers[container_id]["server"])
 
-    # =========================
-    # CHAT DETECTION
-    # =========================
-    if "<" in message and ">" in message and "[Rcon] <" not in message:
+    index = "[net.minecraft.server.MinecraftServer/]: "
+
+    valid_loaders = ["vanilla", "neoforge", "spigot"] # Currently implemented loaders
+
+    if loader == "neoforge":
+        neoforge_index = "[net.minecraft.server.MinecraftServer/]: "
+        if neoforge_index not in message:
+            return
+        index = neoforge_index
+
+    if loader == "vanilla":
+        vanilla_index = "[Server thread/INFO]: "
+        if vanilla_index not in message:
+            return
+        index = vanilla_index
+
+    if loader == "spigot":
+        spigot_index = "INFO]: "
+        if spigot_index not in message:
+            return
+        index = spigot_index
+
+    if loader not in valid_loaders: # Legacy handling, may not work
+        print(f"unrecognized loader {loader}, using legacy log parsing (may not work)")
+        # =========================
+        # CHAT DETECTION
+        # =========================
+        if "<" in message and ">" in message and "[Rcon] <" not in message:
+            chat_name = re.search(r'<([^>]*)>', message).group(1)
+            for username in usernames:
+                if username in chat_name:
+                    chatchannel = await bot.fetch_channel(containers[container_id]["chat_id"])
+                    await chatchannel.send(f"```{chat_name}: {message[message.index('> '):]}```")
+                    return
+
+        # =========================
+        # OTHER USER EVENTS
+        # =========================
         if loader == "vanilla":
-            newmessage = message[message.index('<')+1:]
-        elif loader == "neoforge":
+            newmessage = message[message.index('<')+1:] if "<" in message else message
+        elif loader in ["neoforge", "forge"]:
             newmessage = message.split("]:", 1)[-1].strip()
-        elif loader == "forge":
-            newmessage = message.split("]: ", 1)[-1].strip()
         else:
             return
 
-        if newmessage[1:].startswith(tuple(usernames)):
+        if newmessage.startswith(tuple(usernames)):
             chatchannel = await bot.fetch_channel(containers[container_id]["chat_id"])
-            await chatchannel.send(f"```{message[message.index('<'):]}```")
-            return
-
-    # =========================
-    # OTHER USER EVENTS
-    # =========================
-    if loader == "vanilla":
-        newmessage = message[message.index('<')+1:] if "<" in message else message
-    elif loader in ["neoforge", "forge"]:
-        newmessage = message.split("]:", 1)[-1].strip()
-    else:
+            await chatchannel.send(f"```{newmessage}```")
         return
 
-    if newmessage.startswith(tuple(usernames)):
-        chatchannel = await bot.fetch_channel(containers[container_id]["chat_id"])
-        await chatchannel.send(f"```{newmessage}```")
+    raw_message = message.split(index, 1)[-1].strip()
+    new_message = raw_message
+    message_type = "none"
+    refresh_needed = False
 
+    # Player Message
+    for username in usernames:
+        if "<" in raw_message and ">" in raw_message:
+            if username in raw_message[:raw_message.index(">")]:
+                new_message = f"```{username}: {raw_message.split('>', 1)[-1].strip()}```"
+                message_type = "message"
+                break
+
+    # Player Event
+    if message_type == "none":
+        for username in usernames:
+            if username in raw_message:
+                new_message = f"```{raw_message}```"
+                message_type = "event"
+                if "joined the game" in raw_message:
+                    players = containers[container_id].get("players", [])
+                    if not isinstance(players, list):
+                        players = []
+                    if username not in players:
+                        containers[container_id]["players"] = players + [username]
+                        save_containers()
+                        refresh_needed = True
+                if "left the game" in raw_message:
+                    players = containers[container_id].get("players", [])
+                    if not isinstance(players, list):
+                        players = []
+                    updated_players = [player for player in players if player != username]
+                    if updated_players != players:
+                        containers[container_id]["players"] = updated_players
+                        save_containers()
+                        refresh_needed = True
+                if ":" in new_message: # Handles /list
+                    return
+                break
+
+    if message_type != "none":
+        chatchannel = await bot.fetch_channel(containers[container_id]["chat_id"])
+        await chatchannel.send(new_message)
+        if refresh_needed:
+            from utils.discord import refresh_panel
+            await refresh_panel(bot, container_id)
 
 # =========================
 # WHITELIST READER
@@ -114,37 +195,39 @@ def get_usernames(container_id):
 # CONSOLE BUFFER TASK
 # =========================
 async def start_log_buffer_task(bot):
-    print("[INFO] Started log buffer task...")
+    global console_emptier, console_emptier_task
+    print("Started global log handling...")
 
-    while True:
-        log_dict_copy = dict(log_dict)
-        log_dict.clear()
+    try:
+        while True:
+            log_dict_copy = dict(log_dict)
+            log_dict.clear()
 
-        for container_id, messages in log_dict_copy.items():
-            console_channel = await bot.fetch_channel(
-                containers[container_id]["console_id"]
-            )
+            for container_id, messages in log_dict_copy.items():
+                console_channel = await bot.fetch_channel(
+                    containers[container_id]["console_id"]
+                )
 
-            joined = "\n".join(messages)
+                joined = "\n".join(messages)
 
-            # Discord message splitting
-            for i in range(0, len(joined), 1900):
-                chunk = joined[i:i+1900]
-                await console_channel.send(f"```{chunk}```")
+                # Discord message splitting
+                for i in range(0, len(joined), 1900):
+                    chunk = joined[i:i+1900]
+                    await console_channel.send(f"```{chunk}```")
 
-        await asyncio.sleep(1)
+            await asyncio.sleep(1)
+    finally:
+        console_emptier = False
+        console_emptier_task = None
 
 
 # =========================
 # START LOGGING
 # =========================
 async def startlogging(bot, container_id):
-    global console_emptier, active_logs
+    global console_emptier, console_emptier_task, active_logs
 
-    await dm_superuser(
-        bot,
-        f"ATTEMPTING TO START LOGGING FOR {containers[container_id]['nick']}"
-    )
+    #await dm_superuser(bot, f"ATTEMPTING TO START LOGGING FOR {containers[container_id]['nick']}")
 
     # Already running?
     if container_id in active_logs:
@@ -155,9 +238,11 @@ async def startlogging(bot, container_id):
 
     stop_event = threading.Event()
 
+    loop = asyncio.get_running_loop()
+
     log_thread = threading.Thread(
         target=poll_log_file,
-        args=(container_id, bot.loop, bot, stop_event),
+        args=(container_id, loop, bot, stop_event),
         daemon=True
     )
 
@@ -173,9 +258,9 @@ async def startlogging(bot, container_id):
     await dm_superuser(bot, f"Started logging for {containers[container_id]['nick']}")
 
     # Start buffer task once
-    if not console_emptier:
+    if not console_emptier or console_emptier_task is None or console_emptier_task.done():
         console_emptier = True
-        bot.loop.create_task(start_log_buffer_task(bot))
+        console_emptier_task = loop.create_task(start_log_buffer_task(bot))
 
 
 # =========================

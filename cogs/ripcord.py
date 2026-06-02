@@ -1,13 +1,15 @@
-import discord
+import discord, asyncio, datetime
 from discord.ext import commands, tasks
 from discord import app_commands
 from discord.app_commands import AppCommandError, CheckFailure
 from utils.perms import has_bot_perm, is_admin, check_is_server_up, is_bot_channel
-from utils.minecraft import checkserversup, startserver, stopserver, handle_message
+from utils.minecraft import checkserversup, handle_message
 from utils.minecraft_io import get_server_loader
 from utils.polling import get_active_log_names
-from utils.data import containers, save_containers, servers, create_container, get_containerid_from_interaction
+from utils.data import containers, get_containerid_from_channelid, save_containers, servers, create_container, get_containerid_from_interaction
 from utils.networking import is_server_up, command
+from utils.discord import refresh_panel
+from utils.autorestart import restart_precheck, parse_autorestart_time, restore_autorestarting_servers, run_restart_script, stop_running_servers_for_restart, validate_autorestart_time
 from typing import Union
 
 async def server_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
@@ -27,6 +29,15 @@ async def allowserver_autocomplete(interaction: discord.Interaction, current: st
         if current.lower() in server.lower() and server.lower() != "archive"
     ]
 
+async def disallowserver_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
+    container_id = get_containerid_from_interaction(interaction)
+    allowed_servers = containers[container_id]["allowed_servers"]
+    return [
+        app_commands.Choice(name=server, value=server)
+        for server in allowed_servers
+        if current.lower() in server.lower()
+    ]
+
 async def container_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
     choices = []
 
@@ -43,14 +54,62 @@ async def container_autocomplete(interaction: discord.Interaction, current: str)
 class Ripcord(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        self.restore_autorestart_task = None
         self.checkservervalue.start()
+        self.autorestart_time = parse_autorestart_time()
+        if self.autorestart_time is None:
+            print("Auto restart disabled")
+        else:
+            hour, minute = self.autorestart_time
+            validate_autorestart_time(hour, minute)
+            print(f"Auto restart scheduled daily at {hour:02d}:{minute:02d}")
+            local_timezone = datetime.datetime.now().astimezone().tzinfo
+            self.autorestartpc.change_interval(
+                time=datetime.time(hour=hour, minute=minute, tzinfo=local_timezone)
+            )
+            self.autorestartpc.start()
+
+    async def cog_load(self):
+        self.restore_autorestart_task = asyncio.create_task(self.restore_autorestarting_servers())
+
+    def cog_unload(self):
+        self.checkservervalue.cancel()
+        self.autorestartpc.cancel()
+        if self.restore_autorestart_task:
+            self.restore_autorestart_task.cancel()
+
+    async def restore_autorestarting_servers(self):
+        await self.bot.wait_until_ready()
+        await restore_autorestarting_servers(self.bot)
         
     @tasks.loop(minutes=1)
     async def checkservervalue(self):
         await checkserversup(self.bot)
 
+    @checkservervalue.before_loop
+    async def before_checkservervalue(self):
+        await self.bot.wait_until_ready()
+
+    @tasks.loop(hours=24)
+    async def autorestartpc(self):
+        if await restart_precheck(self.bot):
+            await stop_running_servers_for_restart()
+            await run_restart_script()
+
+    @autorestartpc.before_loop
+    async def before_autorestartpc(self):
+        await self.bot.wait_until_ready()
+
     @commands.Cog.listener()
     async def on_message(self, message):
+        if message.author == self.bot.user:
+            return
+        if isinstance(message.channel, discord.DMChannel):
+            await message.channel.send("Pong!")
+            return
+        if message.channel.id in [container_data.get("bot_channel_id") for container_data in containers.values()]:
+            await refresh_panel(self.bot, get_containerid_from_channelid(message.channel.id))
+            return
         await handle_message(self.bot, message)
 
     @app_commands.command(name="createcontainer", description="Creates a new container object to hold a server")
@@ -70,37 +129,6 @@ class Ripcord(commands.Cog):
             await interaction.followup.send(f"Creation of container {nickname} failed with error code {result}", wait=True, ephemeral=True)
         else:
             await interaction.followup.send(f"Container {nickname} created with ID {result}", wait=True, ephemeral=True)
-
-    @app_commands.command(name="start", description="Starts the currently selected minecraft server")
-    @is_bot_channel()
-    @has_bot_perm()
-    async def start(self, interaction: discord.Interaction):
-        container_id = get_containerid_from_interaction(interaction)
-        if is_server_up(container_id):
-            await interaction.response.send_message("Server is already running!", ephemeral=True)
-            return
-        if containers[container_id]["starting"]:
-            await interaction.response.send_message("Server is already starting up, calm your tits!", ephemeral=True)
-            return
-        if not containers[container_id]["server"]:
-            await interaction.response.send_message("No server selected, select one using /server", ephemeral=True)
-            return
-
-        await interaction.response.defer()
-        msg = await interaction.followup.send(f"Starting {containers[container_id]['server']} server", wait=True)
-        await startserver(self.bot, msg)
-
-    @app_commands.command(name="stop", description="Stops the currently selected minecraft server")
-    @is_bot_channel()
-    @has_bot_perm()
-    async def stop(self, interaction: discord.Interaction):
-        if not is_server_up(get_containerid_from_interaction(interaction)):
-            await interaction.response.send_message("Server isn't running? Dumbass", ephemeral=True)
-            return
-        
-        await interaction.response.defer()
-        msg = await interaction.followup.send(f"Server shutting down...", wait=True)
-        await stopserver(msg)
 
     @app_commands.command(name="server", description="Select a server to set as active")
     @app_commands.autocomplete(server=server_autocomplete)
@@ -124,6 +152,7 @@ class Ripcord(commands.Cog):
             await interaction.response.send_message(
             f"The container is already up with server {server}."
             f"You must first stop it with /stop to change the server.", ephemeral=True)
+            return
         
         containers[container_id]["server"] = server
         save_containers()
@@ -147,6 +176,21 @@ class Ripcord(commands.Cog):
         containers[container_id]["allowed_servers"].append(server)
         save_containers()
         await interaction.response.send_message(f"{server} has been added to container {containers[container_id]["nick"]}", ephemeral=True)
+
+    @app_commands.command(name="disallowserver", description="Removes an allowed server from a container")
+    @app_commands.autocomplete(server=disallowserver_autocomplete)
+    @is_bot_channel()
+    @is_admin()
+    async def disallowserver(self, interaction: discord.Interaction, server: str):
+        container_id = get_containerid_from_interaction(interaction)
+
+        if server not in containers[container_id]["allowed_servers"]:
+            await interaction.response.send_message(f"{server} is not currently allowed", ephemeral=True)
+            return
+
+        containers[container_id]["allowed_servers"].remove(server)
+        save_containers()
+        await interaction.response.send_message(f"{server} has been removed from container {containers[container_id]["nick"]}", ephemeral=True)
 
     @app_commands.command(name="container", description="gives information about the current containers")
     @app_commands.autocomplete(container=container_autocomplete)
@@ -228,6 +272,7 @@ class Ripcord(commands.Cog):
                        "/stop                  - Stop the server\n"
                        "/server                - Changes the active server\n"
                        "/allowserver           - Adds server to containers allowed server list\n"
+                       "/disallowserver        - Removes server from containers allowed server list\n"
                        "/ping                  - Ping the bot\n"
                        "/status                - Check server status\n"
                        "\n"

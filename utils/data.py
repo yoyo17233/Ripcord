@@ -1,3 +1,4 @@
+import copy
 import json, os, discord, uuid
 from dotenv import load_dotenv
 from pathlib import Path
@@ -25,7 +26,10 @@ DEFAULT_CONTAINER = {
     "logging":False,
     "up":False,
     "starting":False,
-    "lastrevive":0
+    "autorestarting":False,
+    "lastrevive":0,
+    "panel_message": [],
+    "players": []
 }
 
 def load_containers():
@@ -33,7 +37,20 @@ def load_containers():
         with open(CONTAINER_FILE, "w") as f:
             json.dump({}, f, indent=4)
     with open(CONTAINER_FILE, "r") as f:
-        return json.load(f)
+        loaded = json.load(f)
+
+    updated = False
+    for container_data in loaded.values():
+        for key, value in DEFAULT_CONTAINER.items():
+            if key not in container_data:
+                container_data[key] = copy.deepcopy(value)
+                updated = True
+
+    if updated:
+        with open(CONTAINER_FILE, "w") as f:
+            json.dump(loaded, f, indent=4)
+
+    return loaded
 
 def save_containers():
     with open(CONTAINER_FILE, "w") as f:
@@ -82,7 +99,7 @@ def create_container(interaction: discord.Interaction, nick, bot_perms, console_
                 return 3
             
     id = uuid.uuid4().hex
-    containers[id] = DEFAULT_CONTAINER
+    containers[id] = copy.deepcopy(DEFAULT_CONTAINER)
     containers[id]["nick"] = nick
     containers[id]["guild_id"] = guild_id
     containers[id]["bot_perm"] = bot_perms

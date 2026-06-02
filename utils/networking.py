@@ -5,8 +5,7 @@ from utils.data import containers
 
 load_dotenv()
 
-local_ip = socket.gethostbyname(socket.gethostname())
-RCON_IP = local_ip
+RCON_IP = socket.gethostbyname(socket.gethostname())
 RCON_PASSWORD = os.getenv("RCON_PASSWORD")
 
 def is_server_up(container_id):
@@ -23,5 +22,6 @@ def command(command_name, container_id):
             response = mcr.command(command_name)
         return response
     except Exception as e:
-        print("error happened sending message")
-        return e
+        error_message = f"RCON command failed: {e}"
+        print(error_message)
+        return error_message
