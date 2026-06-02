@@ -139,26 +139,30 @@ async def refresh_panel(bot, container_id):
         return
     embed = generate_embed(container)
     view = ServerControlView(container_id)
-    
-    old_msg = None
-    panel_message_id = container.get("panel_message")
-    if panel_message_id:
-        try:
-            old_msg = await channel.fetch_message(int(panel_message_id))
-        except discord.NotFound:
-            print("Old panel message was deleted, sending a new one.")
+
+    panel_messages = container.get("panel_message", [])
+    if panel_messages and not isinstance(panel_messages, list):
+        panel_messages = [panel_messages]
+    old_panel_messages = list(panel_messages)
 
     new_msg = await channel.send(embed=embed, view=view)
-    if old_msg:
-        for _ in range(3):
-            try:
-                await old_msg.delete()
-                break
-            except discord.HTTPException:
-                await asyncio.sleep(2)
-
-    container["panel_message"] = new_msg.id
+    container["panel_message"] = old_panel_messages + [new_msg.id]
     save_containers()
+
+    for panel_message_id in old_panel_messages:
+        try:
+            old_msg = await channel.fetch_message(int(panel_message_id))
+            for _ in range(3):
+                try:
+                    await old_msg.delete()
+                    container["panel_message"].remove(panel_message_id)
+                    save_containers()
+                    break
+                except discord.HTTPException:
+                    await asyncio.sleep(2)
+        except discord.NotFound:
+            container["panel_message"].remove(panel_message_id)
+            save_containers()
 
 async def start_loop(client, container_id):
     await refresh_panel(client, container_id)
