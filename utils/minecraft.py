@@ -44,16 +44,16 @@ async def server_start_loop(bot, container_id):
             save_containers()
             return
         if is_server_up(container_id):
-            print("server is up")
+            #print("server is up")
             containers[container_id]["up"] = True
             save_containers()
             if not containers[container_id]["logging"]:
                 print("log is off, starting log")
                 await startlogging(bot, container_id)
-            print("serverstarting setting to 0...")
+            #print("serverstarting setting to 0...")
             containers[container_id]["starting"] = False
             save_containers()
-            print("serverstarting successfully set to 0")
+            #print("serverstarting successfully set to 0")
             return
         await asyncio.sleep(POLLSECONDS)
 
@@ -80,19 +80,19 @@ async def startserver(bot, container_id):
     write_server_properties(server_name, server_props)
 
     runfilepath = SERVER_DIR / server_name / "run.bat"
-    print(f"checking for path {runfilepath}")
+    #print(f"checking for path {runfilepath}")
     if not os.path.exists(runfilepath):
         print("generating run.bat")
         generate_run_bat(server_name)
 
-    print("starting " + containers[container_id]["server"] + " server")
-    print("running command: " + build_run(containers[container_id]["server"]))
+    #print("starting " + containers[container_id]["server"] + " server")
+    #print("running command: " + build_run(containers[container_id]["server"]))
     await asyncio.create_subprocess_shell(
         build_run(containers[container_id]["server"]),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE
     )
-    print("started server process, now waiting for server to come up...")
+    #print("started server process, now waiting for server to come up...")
     await server_start_loop(bot, container_id)
     return True
 
@@ -110,13 +110,13 @@ async def stopserver(container_id):
 
     # Stop logging thread (gracefully)
     if container_id in active_logs:
-        print(f"[INFO] Stopping log thread for container {container_id}")
+        print(f"[INFO] Stopping log thread for container {containers[container_id]['nick']}...")
         stopped = await asyncio.to_thread(stop_logging, container_id)
 
         if not stopped:
-            print(f"[WARN] Thread did not shut down cleanly for {container_id}")
+            print(f"[WARN] Thread did not shut down cleanly for {containers[container_id]['nick']}")
     else:
-        print(f"[INFO] No active log thread for container {container_id}")
+        print(f"[INFO] No active log thread for container {containers[container_id]['nick']}")
 
 async def checkserversup(bot):
     from utils.discord import refresh_panel, start_loop
@@ -130,10 +130,6 @@ async def checkserversup(bot):
             server_name = containers[container_id]["server"]
             print(f"Server crashed for container: {container_id}, on server {server_name}, restarting...")
             
-            try:   
-                command("stop", container_id)
-                print("successfully stopped server (shouldn't even get here, right?)")
-            except: print("failed to stop server, already down")
             channel_id = container_data["bot_channel_id"]
             botchannel = bot.get_channel(channel_id)
             while not botchannel:
@@ -156,8 +152,8 @@ async def checkserversup(bot):
             save_containers()
             asyncio.create_task(start_loop(bot, container_id))  # start loop first
             await startserver(bot, container_id)
-            await msg.edit(content=f"{server_name} server crashed, but should be back up now.")
-            print("successfully started server, hopefully...")
+            await msg.edit(content=f"{server_name} server crashed, but is now back online.")
+            print("successfully started server after crash")
             containers[container_id]["lastrevive"] = time.time()
             save_containers()
 

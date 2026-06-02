@@ -50,7 +50,7 @@ def poll_log_file(container_id, loop, bot, stop_event):
         # Better than time.sleep → instant shutdown
         stop_event.wait(1)
 
-    print(f"[INFO] Thread for container {container_id} shutting down cleanly.")
+    #print(f"[INFO] Thread for container {container_id} shutting down cleanly.")
 
 
 async def init_playerlists(bot):
@@ -275,7 +275,7 @@ def stop_logging(container_id):
     thread = data["thread"]
     stop_event = data["stop_event"]
 
-    print(f"[INFO] Stopping thread for container {container_id}...")
+    #print(f"[INFO] Stopping thread for container {container_id}...")
 
     stop_event.set()
     thread.join(timeout=5)
