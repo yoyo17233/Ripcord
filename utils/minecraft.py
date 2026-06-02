@@ -152,6 +152,8 @@ async def checkserversup(bot):
             containers[container_id]["starting"] = False
             containers[container_id]["up"] = False
             containers[container_id]["logging"] = False
+            containers[container_id]["players"] = []
+            save_containers()
             asyncio.create_task(start_loop(bot, container_id))  # start loop first
             await startserver(bot, container_id)
             await msg.edit(content=f"{server_name} server crashed, but should be back up now.")
