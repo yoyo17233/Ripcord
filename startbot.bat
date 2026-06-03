@@ -1,3 +1,3 @@
 cd /d "%~dp0"
-start "" pythonw main.py
+start "" pythonw main-ripcord.py
 exit
