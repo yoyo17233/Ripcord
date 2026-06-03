@@ -2,7 +2,7 @@ import os
 from dotenv import load_dotenv
 import discord
 from discord.ext import commands
-from utils.utilities import dm_superuser, log
+from utils.utilities import clearlogs, dm_superuser, log
 from utils.data import init_guilds, containers, save_containers
 from utils.networking import is_server_up
 from utils.polling import startlogging, init_playerlists
@@ -36,6 +36,7 @@ async def on_ready():
     await send_control_panels(bot)
 
     log(f"Logged in as {bot.user}")
+    clearlogs()
     try:
         synced = await bot.tree.sync()
         log(f"Synced {len(synced)} slash commands")
@@ -53,6 +54,8 @@ async def load_cogs():
 
 @bot.event
 async def setup_hook():
+    log("Bot starting...")
+    
     await dm_superuser(bot, "setup_hook called")
     await load_cogs()
 

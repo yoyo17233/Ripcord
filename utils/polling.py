@@ -287,7 +287,7 @@ def stop_logging(container_id):
     del active_logs[container_id]
     containers[container_id]["logging"] = False
 
-    log(f"{containers[container_id]['nick']} container log stopped cleanly")
+    log(f"{containers[container_id]['server']} server log in container {containers[container_id]['nick']} stopped cleanly")
     return True
 
 def get_active_log_names():
