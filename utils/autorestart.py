@@ -20,9 +20,9 @@ async def restart_precheck(bot):
     if ONLY_IF_EMPTY:
         for container in containers.values():
             if container.get("players"):
-                await dm_superuser(bot, "Restart precheck failed: Container has players.")
+                log("Restart precheck failed: Container has players.")
                 return False
-    await dm_superuser(bot, "Restart precheck passed: No players online.")
+    log("Restart precheck passed: No players online.")
     return True
 
 def parse_autorestart_time():
