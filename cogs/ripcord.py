@@ -93,8 +93,11 @@ class Ripcord(commands.Cog):
 
     @tasks.loop(hours=24)
     async def autorestartpc(self):
+        log("Running auto restart precheck...")
         if await restart_precheck(self.bot):
+            log("Precheck passed, stopping servers...")
             await stop_running_servers_for_restart()
+            log("All servers stopped, running restart script...")
             await run_restart_script()
 
     @autorestartpc.before_loop
@@ -224,6 +227,7 @@ class Ripcord(commands.Cog):
             ephemeral=True
         )
 
+    ''' Disabled Commands
     @app_commands.command(name="ping", description="Responds \"Pong!\" - Used to test connection to the bot")
     @has_bot_perm()
     async def ping(self, interaction: discord.Interaction):
@@ -242,7 +246,7 @@ class Ripcord(commands.Cog):
             await message.edit(content=f"✅ {containers[container_id]["server"]} Server is online! ✅")
         else:
             await message.edit(content=f"❌ {containers[container_id]["server"]} Server is offline! ❌")
-
+    
     @app_commands.command(name="list", description="Lists the current players on the active server")
     @is_bot_channel()
     @has_bot_perm()
@@ -263,34 +267,45 @@ class Ripcord(commands.Cog):
         if loader == "forge":
             tpsCommand = "forge tps"
         await interaction.response.send_message(f"```{command(tpsCommand, get_containerid_from_interaction(interaction))}```")
+    '''
 
-    @app_commands.command(name="help", description="Gives information about possible commands")
-    @has_bot_perm()
-    async def help(self, interaction: discord.Interaction):
-        await interaction.response.send_message("```\n"
-                       "Commands:\n\n"
-                       "/start                 - Start the server\n"
-                       "/stop                  - Stop the server\n"
-                       "/server                - Changes the active server\n"
-                       "/allowserver           - Adds server to containers allowed server list\n"
-                       "/disallowserver        - Removes server from containers allowed server list\n"
-                       "/ping                  - Ping the bot\n"
-                       "/status                - Check server status\n"
-                       "\n"
-                       "/createcontainer       - Creates a container to hold a server\n"
-                       "\t Bot Perm -> Permission to use the bot\n"
-                       "\t Console Perm -> Permission to use the console\n"
-                       "\t Nick -> Nickname for the container\n"
-                       "\t Bot Channel -> Channel to give commands to the bot (Implicit from the channel where the command is run)\n"
-                       "\t Chat Channel -> Channel for minecraft chat\n"
-                       "\t Console Channel -> Channel for minecraft chat\n"
-                       "\t Port -> Port for minecraft server to run on\n"
-                       "/help                  - Show this message\n```\n", ephemeral=True)
-        
     @app_commands.command(name="logging", description="Gives information about running logging threads")
     @has_bot_perm()
     async def logging(self, interaction: discord.Interaction):
         await interaction.response.send_message(get_active_log_names(), ephemeral=True)
+
+    @app_commands.command(name="help", description="Gives information about possible commands")
+    @has_bot_perm()
+    async def help(self, interaction: discord.Interaction):
+        await interaction.response.send_message(
+            "```\n"
+            "Control Panel  (buttons in the bot channel)\n"
+            "  Start    - Start the active server\n"
+            "  Stop     - Stop the running server\n"
+            "  Refresh  - Refresh the panel embed\n"
+            "\n"
+            "Server Commands\n"
+            "  /server          - View or change the active server\n"
+            "  /status          - Check whether the server is online\n"
+            "  /ping            - Ping the bot\n"
+            "\n"
+            "Admin Commands\n"
+            "  /allowserver     - Allow a server for this container\n"
+            "  /disallowserver  - Remove an allowed server from this container\n"
+            "  /container       - Show details about a container\n"
+            "  /logging         - Show active log threads\n"
+            "  /createcontainer - Create a new container\n"
+            "    botperm        -> Role required to use the bot\n"
+            "    consoleperm    -> Role required to use the console channel\n"
+            "    nickname       -> Display name for the container\n"
+            "    chatchannel    -> Channel for Minecraft chat relay\n"
+            "    consolechannel -> Channel for server console output\n"
+            "    port           -> Minecraft server port (20000-29999)\n"
+            "\n"
+            "  /help            - Show this message\n"
+            "```",
+            ephemeral=True
+        )
                        
     async def cog_app_command_error(self, interaction: discord.Interaction, error: AppCommandError):
         if isinstance(error, CheckFailure):

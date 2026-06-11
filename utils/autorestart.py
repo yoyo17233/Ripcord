@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 from utils.data import containers, save_containers
 from utils.minecraft import startserver, stopserver
 from utils.networking import is_server_up
-from utils.utilities import dm_superuser
+from utils.utilities import dm_superuser, log
 
 load_dotenv()
 
@@ -94,6 +94,8 @@ async def stop_running_servers_for_restart():
 
     for container_id in running_container_ids:
         await stopserver(container_id)
+        log(f"Sent stop command to container {containers[container_id]['nick']}")
+        
 
     deadline = asyncio.get_running_loop().time() + SHUTDOWN_GRACE_SECONDS
     while asyncio.get_running_loop().time() < deadline:
@@ -106,4 +108,5 @@ async def stop_running_servers_for_restart():
 
 async def run_restart_script():
     restart_script = Path(RESTART_SCRIPT).resolve()
+    log(f"Running restart script")
     await asyncio.create_subprocess_shell(f'"{restart_script}"')

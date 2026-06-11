@@ -1,31 +1,71 @@
 # Ripcord
-A bot made for the Yeet Discord Server
+A Discord bot that bridges Discord and Minecraft — remotely manage servers, relay chat, and keep things running automatically.
 
-Hey, this is a personal bot I'm mainly using for my Discord and Minecraft server, to combine functionality between them, however it also has some other features. Many values are stored via json to persist through bot lifetimes. Feel free to change things to get them to work for your server. There exists functionality for one machine to host multiple servers concurrently for multiple servers as well, with additional ports/discord servers etc.
+This is a personal project built for my own Discord and Minecraft server. It supports running multiple Minecraft servers concurrently across multiple Discord servers, each isolated in its own "container." Values are persisted in `containers.json` across bot restarts.
 
-If you end up using this bot and you think its neat, feel free to send me a couple of bucks <3 https://buymeacoffee.com/yoyo4444
+Feel free to adapt it for your own server. If you find it useful, you're welcome to send a few bucks: https://buymeacoffee.com/yoyo4444
 
-In order to be able to use the bot, set up the .env using the .env.example file, and then you first need to create a container. If you have any issues setting it up, feel free to message me on discord: yoyo.4444
+Questions or issues: timothy.kwartler@gmail.com or **yoyo.4444** on Discord
 
-## Minecraft Server Cog
+---
 
-- /start                 => Remotely starts the currently selected server (User must have minecraft permission discord role)
-- /stop                  => Remotely stops whichever server is currently running
-- /server                => "-" parameter displays current selected server, otherwise, server dropdown changes selected server
-- /ping                  => Bot will respond "Pong" to ensure bot is online
-- /status                => Will give the status of the server, if one is up or not
-- /list                  => Runs the /list command in minecraft, and prints the result
-- /tps                   => Runs /forge tps or /neoforge tps to get server performance values
-- /say <message>         => Says the message in chat as [Rcon]
-- /createcontainer       - Creates a container to hold a server
-    * Bot Perm -> Permission to use the bot
-    * Console Perm -> Permission to use the console
-    * Nick -> Nickname for the container
-    * Bot Channel -> Channel to give commands to the bot (Implicit from the channel where the command is run)
-    * Chat Channel -> Channel for minecraft chat
-    * Console Channel -> Channel for minecraft chat
-    * Port -> Port for minecraft server to run on
-- /container             - Shows information on any container
-- /allowserver           - Allows current container to swap to this server (servers automatically grabbed from directory in .env)
+## Setup
 
-Questions can be brought to timothy.kwartler@gmail.com or yoyo.4444 on discord
+1. Copy `.env.example` to `.env` and fill in all values.
+2. Run `pip install -r requirements.txt`.
+3. Start the bot with `startbot.bat` (or `python main-ripcord.py`).
+4. Create at least one container with `/createcontainer` (see Admin Commands below).
+5. Use `/allowserver` to add servers to the container, then `/server` to select one.
+
+---
+
+## Control Panel
+
+When the bot starts, it posts a control panel embed in each container's bot channel with three buttons:
+
+- **Start** — Start the active server
+- **Stop** — Stop the running server
+- **Refresh** — Refresh the embed with current status and player list
+
+---
+
+## Slash Commands
+
+### Server Commands
+| Command | Description |
+|---------|-------------|
+| `/server` | View or change the active server for this container |
+| `/help` | Show the in-Discord help message |
+
+### Admin Commands
+| Command | Description |
+|---------|-------------|
+| `/allowserver` | Allow a server directory to be used by this container |
+| `/disallowserver` | Remove a server from the container's allowed list |
+| `/container` | Show details and current state of a container |
+| `/logging` | Show which containers currently have active log threads |
+| `/createcontainer` | Create a new container (run from the desired bot channel) |
+
+#### `/createcontainer` Parameters
+| Parameter | Description |
+|-----------|-------------|
+| `botperm` | Role required to use general bot commands |
+| `consoleperm` | Role required to send commands via the console channel |
+| `nickname` | Display name for this container |
+| `chatchannel` | Channel for Minecraft chat relay |
+| `consolechannel` | Channel for server console output |
+| `port` | Minecraft server port (must be in range 20000–29999) |
+
+---
+
+## Autorestart
+
+Ripcord can restart the host machine on a daily schedule and automatically bring servers back online afterwards. Configure in `.env`:
+
+```
+AUTORESTART=true
+AUTORESTART_HOUR=4        # 24-hour format — restart at 4:00 AM
+ONLY_IF_EMPTY=true        # Only restart if no players are online
+```
+
+The bot saves which servers were running before the restart and starts them again on the next boot.
