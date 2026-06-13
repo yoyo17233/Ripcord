@@ -113,7 +113,7 @@ def create_container(interaction: discord.Interaction, nick, bot_perms, console_
     return id
 
 def link_server(interaction: discord.Interaction, server_name):
-    if not (server_name in servers):
+    if not (server_name in get_servers()):
         return
     container_id = get_containerid_from_interaction(interaction)
     if server_name in containers[container_id]["allowed_servers"]:
@@ -162,4 +162,3 @@ def get_containerids_from_guildid(guild_id):
     return container_ids
 
 containers = load_containers()
-servers = get_servers()

@@ -6,7 +6,7 @@ from utils.perms import has_bot_perm, is_admin, check_is_server_up, is_bot_chann
 from utils.minecraft import checkserversup, handle_message
 from utils.minecraft_io import get_server_loader
 from utils.polling import get_active_log_names
-from utils.data import containers, get_containerid_from_channelid, save_containers, servers, create_container, get_containerid_from_interaction
+from utils.data import containers, get_containerid_from_channelid, save_containers, get_servers, create_container, get_containerid_from_interaction
 from utils.networking import is_server_up, command
 from utils.discord import refresh_panel
 from utils.autorestart import restart_precheck, parse_autorestart_time, restore_autorestarting_servers, run_restart_script, stop_running_servers_for_restart, validate_autorestart_time
@@ -26,7 +26,7 @@ async def server_autocomplete(interaction: discord.Interaction, current: str) ->
 async def allowserver_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
     return [
         app_commands.Choice(name=server, value=server)
-        for server in servers
+        for server in get_servers()
         if current.lower() in server.lower() and server.lower() != "archive"
     ]
 
@@ -169,7 +169,7 @@ class Ripcord(commands.Cog):
     async def allowserver(self, interaction: discord.Interaction, server: str):
         container_id = get_containerid_from_interaction(interaction)
 
-        if not server in servers:
+        if not server in get_servers():
             await interaction.response.send_message(f"{server} Directory not found", ephemeral=True)
             return
 
